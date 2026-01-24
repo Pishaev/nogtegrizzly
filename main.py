@@ -1,5 +1,6 @@
 import asyncio
 import re
+import os
 from datetime import datetime
 from aiogram import Bot, Dispatcher
 from aiogram.filters import Command
@@ -15,7 +16,9 @@ from db import (
     get_users_with_review_time, conn
 )
 
-BOT_TOKEN = "8511739482:AAGvix92KkVx4mGRQVl0QvDo9xYHOYtlMvc"
+
+BOT_TOKEN = os.getenv("8511739482:AAGvix92KkVx4mGRQVl0QvDo9xYHOYtlMvc")
+
 
 init_db()
 
