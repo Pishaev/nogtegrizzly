@@ -10,12 +10,15 @@ from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 
+from datetime import datetime, timezone, timedelta
+
 from db import (
     init_db, create_user, get_user, add_event,
     get_today_events, save_analysis, set_review_time,
     get_users_with_review_time, conn
 )
 
+moscow_tz = timezone(timedelta(hours=3))
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 init_db()
 
@@ -187,19 +190,12 @@ async def save_time(message: Message, state: FSMContext):
 
 # --- Reminder loop ---
 async def reminder_loop(bot: Bot):
-    sent_today = set()  # сюда будем складывать user_id, чтобы не спамить
-
     while True:
-        now = datetime.now().strftime("%H:%M")
-        today = datetime.now().date()
+        now = datetime.now(moscow_tz)
+        now_str = now.strftime("%H:%M")
         users = get_users_with_review_time()
         for user_id, tg_id, review_time in users:
-            review_time = review_time.strip()  # убираем пробелы
-            key = (user_id, today)
-
-            if review_time == now and key not in sent_today:
-                sent_today.add(key)  # помечаем, что уведомление отправлено
-
+            if review_time == now_str:
                 events = get_today_events(user_id)
                 if events:
                     await bot.send_message(
@@ -218,8 +214,7 @@ async def reminder_loop(bot: Bot):
                         "Целостны ли твои ногти сейчас?",
                         reply_markup=keyboard
                     )
-
-        await asyncio.sleep(20)  # проверяем чаще, чтобы не пропустить минуту
+        await asyncio.sleep(30)
 
 
 
