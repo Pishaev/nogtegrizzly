@@ -17,7 +17,7 @@ from db import (
 )
 
 
-BOT_TOKEN = os.getenv("8511739482:AAGvix92KkVx4mGRQVl0QvDo9xYHOYtlMvc")
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
 
 
 init_db()
