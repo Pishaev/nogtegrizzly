@@ -214,7 +214,7 @@ async def reminder_loop(bot: Bot):
                         "Целостны ли твои ногти сейчас?",
                         reply_markup=keyboard
                     )
-        await asyncio.sleep(30)
+        await asyncio.sleep(60)
 
 
 
