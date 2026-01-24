@@ -16,10 +16,7 @@ from db import (
     get_users_with_review_time, conn
 )
 
-
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
-
-
 init_db()
 
 # --- FSM States ---
@@ -36,6 +33,7 @@ class CallbackState(StatesGroup):
     waiting_text = State()
 
 
+# --- Основная клавиатура ---
 def main_keyboard():
     return ReplyKeyboardMarkup(
         keyboard=[
@@ -56,17 +54,24 @@ async def start(message: Message, state: FSMContext):
         "Привет! 👋\n\n"
         "Я бот, который помогает следить за привычкой грызть ногти и разбирать причины, когда это происходит.\n\n"
         "Вот как со мной работать:\n\n"
-        "1️⃣ *Записать момент*\n"
-        "   Нажми кнопку 📌 или используй команду /pogryz, чтобы написать, что произошло.\n\n"
-        "2️⃣ *Вечерний разбор*\n"
-        "   Я буду напоминать вечером:\n"
-        "   - ✅ Да — ногти целы, покажу твою текущую серию дней без грызения.\n"
-        "   - ❌ Нет — сразу разберём ситуацию и причины.\n\n"
-        "3️⃣ *Статистика*\n"
-        "   Показываю только текущую и максимальную серии дней без грызения.\n\n"
-        "4️⃣ *Время вечернего разбора*\n"
+        "1️⃣ Записать момент — нажми кнопку 📌 или используй команду /pogryz\n"
+        "2️⃣ Вечерний разбор — я буду напоминать вечером, целостны ли ногти\n"
+        "3️⃣ Статистика — покажу текущую и максимальную серии дней без грызения\n"
+        "4️⃣ Время вечернего разбора — настроим удобное время 🕰\n"
     )
 
+    # --- Если пользователь впервые, показываем кнопку Начать ---
+    if not user:
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🚀 Начать", callback_data="start_bot")]
+        ])
+        await message.answer(
+            "Добро пожаловать! Нажми кнопку ниже, чтобы начать:",
+            reply_markup=keyboard
+        )
+        return
+
+    # --- Если review_time ещё не установлен ---
     if not user[5]:  # review_time
         await message.answer(
             welcome_text +
@@ -84,23 +89,35 @@ async def start(message: Message, state: FSMContext):
         )
 
 
+# --- Кнопка "Начать" ---
+async def start_button_handler(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()  # убираем "часики"
+    await callback.message.delete()  # удаляем приветственное сообщение с кнопкой
+    # Создаём fake Message для передачи в start
+    fake_msg = Message(
+        message_id=callback.message.message_id,
+        from_user=callback.from_user,
+        chat=callback.message.chat,
+        date=callback.message.date,
+        text="/start",
+    )
+    await start(fake_msg, state)
+
+
 # --- /pogryz ---
 async def pogryz_start(message: Message, state: FSMContext):
     await message.answer("Опиши, что случилось в этот момент:")
     await state.set_state(PogryzState.waiting_text)
 
-# --- /pogryz ---
 async def save_pogryz(message: Message, state: FSMContext):
     user = get_user(message.from_user.id)
     if not user:
         await message.answer("Напиши /start 🙌")
         return
 
-    # Сохраняем событие, но не сбрасываем серию и не запускаем разбор
     add_event(user[0], message.text)
     await message.answer("Событие записано ✅", reply_markup=main_keyboard())
     await state.clear()
-
 
 
 # --- /review ---
@@ -110,13 +127,11 @@ async def start_review(message: Message, state: FSMContext):
         await message.answer("Напиши /start 🙌")
         return
 
-    # Берём все события за сегодня
     events = get_today_events(user[0])
     if not events:
         await message.answer("Сегодня нет записанных моментов. Это хороший знак 💪")
         return
 
-    # Начинаем разбор с первого события
     await state.update_data(events=events, index=0)
     first_event = events[0]
     await message.answer(
@@ -126,7 +141,6 @@ async def start_review(message: Message, state: FSMContext):
     await state.set_state(ReviewState.waiting_analysis)
 
 
-# --- Сохранение текста после разбора ---
 async def save_review_answer(message: Message, state: FSMContext):
     data = await state.get_data()
     index = data.get("index", 0)
@@ -143,7 +157,6 @@ async def save_review_answer(message: Message, state: FSMContext):
             f"Следующий момент:\n\n_{next_event[3]}_\n\nЧто стало причиной? Какие чувства были?"
         )
     else:
-        # --- После разбора всех событий сбрасываем серию ---
         cur = conn.cursor()
         cur.execute(
             "UPDATE users SET current_streak = 0 WHERE id = ?",
@@ -153,7 +166,6 @@ async def save_review_answer(message: Message, state: FSMContext):
 
         await message.answer("Отлично! Ты разобрал все моменты дня 🙌")
         await state.clear()
-
 
 
 # --- /set_time ---
@@ -174,16 +186,14 @@ async def save_time(message: Message, state: FSMContext):
 
 
 # --- Reminder loop ---
-async def reminder_loop(bot: Bot, dp: Dispatcher):
+async def reminder_loop(bot: Bot):
     while True:
         now = datetime.now().strftime("%H:%M")
         users = get_users_with_review_time()
         for user_id, tg_id, review_time in users:
             if review_time == now:
-                # Берём все события за сегодня
                 events = get_today_events(user_id)
                 if events:
-                    # Отправляем напоминание о разборе
                     await bot.send_message(
                         tg_id,
                         "Время вечернего разбора! Давай разберём все события /review"
@@ -203,59 +213,44 @@ async def reminder_loop(bot: Bot, dp: Dispatcher):
         await asyncio.sleep(60)
 
 
-
-
-
-
-# --- Обработка кнопок ---
+# --- Кнопки Да/Нет и сохранение текста ---
 async def button_handler(callback: CallbackQuery, state: FSMContext):
     user_id = int(callback.data.split("_")[1])
     user = get_user(callback.from_user.id)
-
-    # Убираем клавиатуру сразу после нажатия
     await callback.message.edit_reply_markup(None)
 
     if callback.data.startswith("yes_"):
-        # --- Сначала обновляем серию ---
         current_streak = (user[2] or 0) + 1
         max_streak = max(user[3] or 0, current_streak)
-
         cur = conn.cursor()
         cur.execute(
             "UPDATE users SET current_streak = ?, max_streak = ?, last_clean_day = ? WHERE id = ?",
             (current_streak, max_streak, datetime.now().date().isoformat(), user[0])
         )
         conn.commit()
-
-        # --- Теперь выводим обновлённую статистику ---
         await callback.message.answer(
             f"Молодец! Продолжай в том же духе 💪\n\n"
             f"Текущая серия дней без грызения: {current_streak}\n"
             f"Максимальная серия: {max_streak}"
         )
         await callback.answer()
-
-    else:  # "Нет"
+    else:
         await callback.message.answer("Опиши, что произошло и что стало причиной:")
         await state.set_state(CallbackState.waiting_text)
         await state.update_data(user_id=user_id)
         await callback.answer()
 
 
-# --- Сохранение текста после "Нет" ---
 async def save_callback_text(message: Message, state: FSMContext):
     data = await state.get_data()
     user_id = data.get("user_id")
     add_event(user_id, message.text)
     await state.clear()
-
-    # --- Сразу запускаем разбор событий ---
     user = get_user(message.from_user.id)
     events = get_today_events(user[0])
     if not events:
         await message.answer("Сегодня нет записанных моментов. Это хороший знак 💪")
         return
-
     await state.update_data(events=events, index=0)
     first_event = events[0]
     await message.answer(
@@ -263,6 +258,7 @@ async def save_callback_text(message: Message, state: FSMContext):
         "Что стало причиной? Какие чувства были?"
     )
     await state.set_state(ReviewState.waiting_analysis)
+
 
 async def keyboard_handler(message: Message, state: FSMContext):
     if message.text == "📌 Записать момент":
@@ -273,6 +269,7 @@ async def keyboard_handler(message: Message, state: FSMContext):
         )
         await state.set_state(TimeState.waiting_time)
 
+
 # --- main ---
 async def main():
     bot = Bot(token=BOT_TOKEN)
@@ -281,19 +278,19 @@ async def main():
     dp.message.register(start, Command("start"))
     dp.message.register(pogryz_start, Command("pogryz"))
     dp.message.register(save_pogryz, PogryzState.waiting_text)
-
     dp.message.register(start_review, Command("review"))
     dp.message.register(save_review_answer, ReviewState.waiting_analysis)
-
     dp.message.register(save_time, TimeState.waiting_time)
-
     dp.message.register(save_callback_text, CallbackState.waiting_text)
+
     dp.callback_query.register(button_handler)
-    
+    dp.callback_query.register(start_button_handler, lambda c: c.data == "start_bot")
+
     dp.message.register(keyboard_handler)
 
-    asyncio.create_task(reminder_loop(bot, dp))
+    asyncio.create_task(reminder_loop(bot))
     await dp.start_polling(bot)
+
 
 if __name__ == "__main__":
     asyncio.run(main())
