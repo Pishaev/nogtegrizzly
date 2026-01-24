@@ -187,11 +187,19 @@ async def save_time(message: Message, state: FSMContext):
 
 # --- Reminder loop ---
 async def reminder_loop(bot: Bot):
+    sent_today = set()  # сюда будем складывать user_id, чтобы не спамить
+
     while True:
         now = datetime.now().strftime("%H:%M")
+        today = datetime.now().date()
         users = get_users_with_review_time()
         for user_id, tg_id, review_time in users:
-            if review_time == now:
+            review_time = review_time.strip()  # убираем пробелы
+            key = (user_id, today)
+
+            if review_time == now and key not in sent_today:
+                sent_today.add(key)  # помечаем, что уведомление отправлено
+
                 events = get_today_events(user_id)
                 if events:
                     await bot.send_message(
@@ -210,7 +218,9 @@ async def reminder_loop(bot: Bot):
                         "Целостны ли твои ногти сейчас?",
                         reply_markup=keyboard
                     )
-        await asyncio.sleep(60)
+
+        await asyncio.sleep(20)  # проверяем чаще, чтобы не пропустить минуту
+
 
 
 # --- Кнопки Да/Нет и сохранение текста ---
