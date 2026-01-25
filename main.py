@@ -20,6 +20,8 @@ from db import (
 
 moscow_tz = timezone(timedelta(hours=3))
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
+ADMIN_ID = os.environ.get("ADMIN_ID")  # <-- сюда вставь свой telegram id
+
 init_db()
 
 # --- FSM States ---
@@ -37,15 +39,21 @@ class CallbackState(StatesGroup):
 
 
 # --- Основная клавиатура ---
-def main_keyboard():
+def main_keyboard(is_admin=False):
+    keyboard = [
+        [KeyboardButton(text="📌 Записать момент")],
+        [KeyboardButton(text="⏰ Изменить время вечернего разбора")]
+    ]
+
+    if is_admin:
+        keyboard.append([KeyboardButton(text="📊 Статистика бота")])
+
     return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="📌 Записать момент")],
-            [KeyboardButton(text="⏰ Изменить время вечернего разбора")]
-        ],
+        keyboard=keyboard,
         resize_keyboard=True,
         one_time_keyboard=False
     )
+
 
 
 # --- /start ---
@@ -70,7 +78,7 @@ async def start(message: Message, state: FSMContext):
         ])
         await message.answer(
             "Добро пожаловать! Нажми кнопку ниже, чтобы начать:",
-            reply_markup=keyboard
+            reply_markup=main_keyboard(message.from_user.id == ADMIN_ID)
         )
         return
 
@@ -80,7 +88,7 @@ async def start(message: Message, state: FSMContext):
             welcome_text +
             "Давай установим удобное время для вечернего разбора. Напиши в формате ЧЧ:ММ, например 21:30",
             parse_mode="Markdown",
-            reply_markup=main_keyboard()
+            reply_markup=main_keyboard(message.from_user.id == ADMIN_ID)
         )
         await state.set_state(TimeState.waiting_time)
     else:
@@ -88,7 +96,7 @@ async def start(message: Message, state: FSMContext):
             welcome_text +
             f"Напоминания настроены на {user[5]} 🕰\n\nЯ готов помочь отслеживать твою привычку 🙌",
             parse_mode="Markdown",
-            reply_markup=main_keyboard()
+            reply_markup=main_keyboard(message.from_user.id == ADMIN_ID)
         )
 
 
@@ -273,6 +281,37 @@ async def keyboard_handler(message: Message, state: FSMContext):
             "Напиши новое время в формате ЧЧ:ММ, например 21:30",
         )
         await state.set_state(TimeState.waiting_time)
+    elif message.text == "📊 Статистика бота":
+        await admin_stats(message)
+
+
+async def admin_stats(message: Message):
+    if message.from_user.id != ADMIN_ID:
+        return
+
+    cur = conn.cursor()
+
+    cur.execute("SELECT COUNT(*) FROM users")
+    users_count = cur.fetchone()[0]
+
+    cur.execute("SELECT COUNT(*) FROM events")
+    events_count = cur.fetchone()[0]
+
+    today = datetime.now().date().isoformat()
+    cur.execute("""
+        SELECT COUNT(DISTINCT user_id)
+        FROM events
+        WHERE datetime LIKE ?
+    """, (f"{today}%",))
+    active_today = cur.fetchone()[0]
+
+    await message.answer(
+        "📊 *Статистика бота*\n\n"
+        f"👤 Пользователей: {users_count}\n"
+        f"📝 Всего событий: {events_count}\n"
+        f"🔥 Активных сегодня: {active_today}",
+        parse_mode="Markdown"
+    )
 
 
 # --- main ---
