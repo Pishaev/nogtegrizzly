@@ -20,7 +20,7 @@ from db import (
 
 moscow_tz = timezone(timedelta(hours=3))
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
-ADMIN_ID = os.environ.get("ADMIN_ID")  # <-- сюда вставь свой telegram id
+ADMIN_ID = int(os.environ.get("ADMIN_ID"))  # <-- сюда вставь свой telegram id
 
 init_db()
 
@@ -127,7 +127,7 @@ async def save_pogryz(message: Message, state: FSMContext):
         return
 
     add_event(user[0], message.text)
-    await message.answer("Событие записано ✅", reply_markup=main_keyboard())
+    await message.answer("Событие записано ✅", reply_markup=main_keyboard(message.from_user.id == ADMIN_ID))
     await state.clear()
 
 
