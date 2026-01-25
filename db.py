@@ -14,7 +14,8 @@ def init_db():
             current_streak INTEGER DEFAULT 0,
             max_streak INTEGER DEFAULT 0,
             last_clean_day TEXT,
-            review_time TEXT
+            review_time TEXT,
+            created_at TEXT
         )
     """)
 
@@ -39,8 +40,11 @@ def get_user(tg_id):
 
 def create_user(tg_id):
     cursor.execute(
-        "INSERT OR IGNORE INTO users (telegram_id, last_clean_day) VALUES (?, ?)",
-        (tg_id, date.today().isoformat())
+        """
+        INSERT OR IGNORE INTO users (telegram_id, last_clean_day, created_at)
+        VALUES (?, ?, ?)
+        """,
+        (tg_id, date.today().isoformat(), datetime.now().isoformat())
     )
     conn.commit()
 

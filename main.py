@@ -291,13 +291,23 @@ async def admin_stats(message: Message):
 
     cur = conn.cursor()
 
+    # Всего пользователей
     cur.execute("SELECT COUNT(*) FROM users")
     users_count = cur.fetchone()[0]
 
+    # Новые сегодня
+    today = datetime.now().date().isoformat()
+    cur.execute(
+        "SELECT COUNT(*) FROM users WHERE created_at LIKE ?",
+        (f"{today}%",)
+    )
+    new_today = cur.fetchone()[0]
+
+    # Всего событий
     cur.execute("SELECT COUNT(*) FROM events")
     events_count = cur.fetchone()[0]
 
-    today = datetime.now().date().isoformat()
+    # Активные сегодня
     cur.execute("""
         SELECT COUNT(DISTINCT user_id)
         FROM events
@@ -307,11 +317,13 @@ async def admin_stats(message: Message):
 
     await message.answer(
         "📊 *Статистика бота*\n\n"
-        f"👤 Пользователей: {users_count}\n"
+        f"👤 Всего пользователей: {users_count}\n"
+        f"🆕 Новых сегодня: {new_today}\n"
         f"📝 Всего событий: {events_count}\n"
         f"🔥 Активных сегодня: {active_today}",
         parse_mode="Markdown"
     )
+
 
 
 # --- main ---
