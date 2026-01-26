@@ -37,12 +37,15 @@ class TimeState(StatesGroup):
 class CallbackState(StatesGroup):
     waiting_text = State()
 
+
 # ---------- Keyboards ----------
 def main_keyboard(is_admin=False):
     keyboard = [
         [KeyboardButton(text="📌 Записать момент")],
-        [KeyboardButton(text="⏰ Изменить время вечернего разбора")]
+        [KeyboardButton(text="⏰ Изменить время вечернего разбора")],
+        [KeyboardButton(text="🌍 Изменить часовой пояс")]
     ]
+
     if is_admin:
         keyboard.append([KeyboardButton(text="📊 Статистика бота")])
 
@@ -50,6 +53,7 @@ def main_keyboard(is_admin=False):
         keyboard=keyboard,
         resize_keyboard=True
     )
+
 
 def russia_timezone_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[
@@ -64,30 +68,21 @@ def russia_timezone_keyboard():
         [InlineKeyboardButton(text="🇷🇺 Владивосток (UTC+10)", callback_data="tz_10")],
     ])
 
-def checkin_keyboard(db_user_id: int):
+
+def checkin_keyboard(user_id):
     return InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton(text="👍 Отлично", callback_data=f"checkin_ok_{db_user_id}"),
-            InlineKeyboardButton(text="😕 Не очень", callback_data=f"checkin_bad_{db_user_id}")
+            InlineKeyboardButton(text="👍 Отлично", callback_data=f"checkin_ok_{user_id}"),
+            InlineKeyboardButton(text="😕 Не очень", callback_data=f"checkin_bad_{user_id}")
         ]
     ])
 
+
 # ---------- /start ----------
 async def start(message: Message, state: FSMContext):
+    create_user(message.from_user.id)
     user = get_user(message.from_user.id)
-    if not user:
-        create_user(message.from_user.id)
-        user = get_user(message.from_user.id)
 
-    welcome_text = (
-        "Привет! 👋\n\n"
-        "Я помогаю отслеживать привычку грызть ногти и разбирать причины.\n\n"
-        "📌 Записывай моменты\n"
-        "🕰 Получай напоминания\n"
-        "📊 Следи за серией без грызения\n"
-    )
-
-    # нет таймзоны
     if user[6] is None:
         await message.answer(
             "Чтобы я присылал напоминания вовремя, выбери свой часовой пояс 🇷🇺",
@@ -95,51 +90,47 @@ async def start(message: Message, state: FSMContext):
         )
         return
 
-    # нет времени разбора
     if not user[5]:
         await message.answer(
-            welcome_text + "\nНапиши время вечернего разбора (ЧЧ:ММ)",
+            "Напиши удобное время вечернего разбора в формате ЧЧ:ММ (например 21:30)",
             reply_markup=main_keyboard(message.from_user.id == ADMIN_ID)
         )
         await state.set_state(TimeState.waiting_time)
         return
 
     await message.answer(
-        welcome_text +
-        f"\nНапоминания настроены на {user[5]} 🕰",
+        "Я готов помочь отслеживать твою привычку 🙌",
         reply_markup=main_keyboard(message.from_user.id == ADMIN_ID)
     )
 
-# ---------- Timezone ----------
+
+# ---------- Timezone callback ----------
 async def timezone_callback(callback: CallbackQuery):
     tz = int(callback.data.split("_")[1])
     user = get_user(callback.from_user.id)
-    if not user:
-        await callback.answer()
-        return
 
     cur = conn.cursor()
     cur.execute("UPDATE users SET timezone = ? WHERE id = ?", (tz, user[0]))
     conn.commit()
 
     await callback.message.edit_text(
-        f"Часовой пояс UTC+{tz} сохранён 🕰\n\nТеперь задай время вечернего разбора."
+        f"Часовой пояс UTC+{tz} сохранён 🕰\n\n"
+        "Теперь можешь пользоваться ботом 👌"
     )
     await callback.answer()
 
+
 # ---------- Pogryz ----------
 async def pogryz_start(message: Message, state: FSMContext):
-    await message.answer("Опиши, что произошло:")
+    await message.answer("Опиши, что случилось:")
     await state.set_state(PogryzState.waiting_text)
 
 async def save_pogryz(message: Message, state: FSMContext):
     user = get_user(message.from_user.id)
-    if not user:
-        return
-
     add_event(user[0], message.text)
-    await message.answer("Событие записано ✅", reply_markup=main_keyboard(message.from_user.id == ADMIN_ID))
+    await message.answer("Событие записано ✅", reply_markup=main_keyboard())
     await state.clear()
+
 
 # ---------- Review ----------
 async def start_review(message: Message, state: FSMContext):
@@ -147,33 +138,28 @@ async def start_review(message: Message, state: FSMContext):
     events = get_today_events(user[0])
 
     if not events:
-        await message.answer("Сегодня событий нет 💪")
+        await message.answer("Сегодня всё чисто 💪")
         return
 
     await state.update_data(events=events, index=0)
-    await message.answer(
-        f"_{events[0][3]}_\n\nЧто стало причиной?",
-        parse_mode="Markdown"
-    )
+    await message.answer(f"{events[0][3]}")
     await state.set_state(ReviewState.waiting_analysis)
 
 async def save_review_answer(message: Message, state: FSMContext):
     data = await state.get_data()
-    index = data["index"]
     events = data["events"]
+    index = data["index"]
 
     save_analysis(events[index][0], message.text)
     index += 1
 
     if index < len(events):
         await state.update_data(index=index)
-        await message.answer(f"_{events[index][3]}_", parse_mode="Markdown")
+        await message.answer(events[index][3])
     else:
-        cur = conn.cursor()
-        cur.execute("UPDATE users SET current_streak = 0 WHERE id = ?", (events[0][1],))
-        conn.commit()
         await message.answer("Разбор завершён 🙌")
         await state.clear()
+
 
 # ---------- Set time ----------
 async def save_time(message: Message, state: FSMContext):
@@ -186,84 +172,27 @@ async def save_time(message: Message, state: FSMContext):
     await message.answer("Время сохранено 🕰")
     await state.clear()
 
-# ---------- Reminder loop ----------
-async def reminder_loop(bot: Bot):
-    while True:
-        now_utc = datetime.utcnow()
-        users = get_users_with_review_time()
 
-        for db_user_id, tg_id, review_time in users:
-            user = get_user(tg_id)
-            if not user:
-                continue
+# ---------- Keyboard handler (ВАЖНО) ----------
+async def keyboard_handler(message: Message, state: FSMContext):
+    if message.text == "📌 Записать момент":
+        await pogryz_start(message, state)
 
-            tz = user[6] or 0
-            user_now = now_utc + timedelta(hours=tz)
-            now_str = user_now.strftime("%H:%M")
+    elif message.text == "⏰ Изменить время вечернего разбора":
+        await message.answer("Введи новое время (ЧЧ:ММ)")
+        await state.set_state(TimeState.waiting_time)
 
-            # чек-ин ровно один раз
-            if now_str == "13:00" and user_now.second < 5:
-                await bot.send_message(
-                    tg_id,
-                    "Как твои ногти сейчас?",
-                    reply_markup=checkin_keyboard(db_user_id)
-                )
-
-            if review_time == now_str:
-                events = get_today_events(db_user_id)
-                if events:
-                    await bot.send_message(tg_id, "Время вечернего разбора /review")
-                else:
-                    await bot.send_message(
-                        tg_id,
-                        "Целостны ли ногти?",
-                        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                            [
-                                InlineKeyboardButton(text="Да", callback_data=f"yes_{db_user_id}"),
-                                InlineKeyboardButton(text="Нет", callback_data=f"no_{db_user_id}")
-                            ]
-                        ])
-                    )
-
-        await asyncio.sleep(60)
-
-# ---------- Callbacks ----------
-async def button_handler(callback: CallbackQuery, state: FSMContext):
-    parts = callback.data.split("_")
-
-    if callback.data.startswith("checkin_ok"):
-        await callback.message.edit_reply_markup(None)
-        await callback.message.answer("Круто 💪")
-        await callback.answer()
-        return
-
-    if callback.data.startswith("checkin_bad"):
-        await callback.message.edit_reply_markup(None)
-        await callback.message.answer("Напиши коротко, что произошло.")
-        await state.set_state(CallbackState.waiting_text)
-        await state.update_data(user_id=int(parts[-1]))
-        await callback.answer()
-        return
-
-    if callback.data.startswith("yes"):
-        user = get_user(callback.from_user.id)
-        cur = conn.cursor()
-        current = (user[2] or 0) + 1
-        cur.execute(
-            "UPDATE users SET current_streak = ?, max_streak = MAX(max_streak, ?) WHERE id = ?",
-            (current, current, user[0])
+    elif message.text == "🌍 Изменить часовой пояс":
+        await message.answer(
+            "Выбери новый часовой пояс 🇷🇺",
+            reply_markup=russia_timezone_keyboard()
         )
-        conn.commit()
-        await callback.message.answer(f"Серия: {current} 🔥")
-        await callback.answer()
 
-    if callback.data.startswith("no"):
-        await callback.message.answer("Опиши, что произошло:")
-        await state.set_state(CallbackState.waiting_text)
-        await state.update_data(user_id=int(parts[-1]))
-        await callback.answer()
+    elif message.text == "📊 Статистика бота":
+        await admin_stats(message)
 
-# ---------- Admin ----------
+
+# ---------- Admin stats ----------
 async def admin_stats(message: Message):
     if message.from_user.id != ADMIN_ID:
         return
@@ -272,31 +201,51 @@ async def admin_stats(message: Message):
     cur.execute("SELECT COUNT(*) FROM users")
     users = cur.fetchone()[0]
 
-    cur.execute("SELECT COUNT(*) FROM events")
-    events = cur.fetchone()[0]
+    await message.answer(f"👤 Пользователей: {users}")
 
-    await message.answer(
-        f"📊 Статистика\n\n👤 Пользователей: {users}\n📝 Событий: {events}"
-    )
 
-# ---------- Main ----------
+# ---------- Reminder loop ----------
+async def reminder_loop(bot: Bot):
+    while True:
+        now_utc = datetime.utcnow()
+        users = get_users_with_review_time()
+
+        for user_id, tg_id, review_time in users:
+            user = get_user(tg_id)
+            tz = user[6] or 0
+            now = (now_utc + timedelta(hours=tz)).strftime("%H:%M")
+
+            if now == "13:00":
+                await bot.send_message(
+                    tg_id,
+                    "Как твои ногти?",
+                    reply_markup=checkin_keyboard(user_id)
+                )
+
+            if review_time == now:
+                await bot.send_message(tg_id, "Время вечернего разбора /review")
+
+        await asyncio.sleep(60)
+
+
+# ---------- main ----------
 async def main():
     bot = Bot(token=BOT_TOKEN)
     dp = Dispatcher(storage=MemoryStorage())
 
     dp.message.register(start, Command("start"))
     dp.message.register(pogryz_start, Command("pogryz"))
-    dp.message.register(save_pogryz, PogryzState.waiting_text)
     dp.message.register(start_review, Command("review"))
+    dp.message.register(save_pogryz, PogryzState.waiting_text)
     dp.message.register(save_review_answer, ReviewState.waiting_analysis)
     dp.message.register(save_time, TimeState.waiting_time)
-    dp.message.register(admin_stats, Command("stats"))
+    dp.message.register(keyboard_handler)
 
     dp.callback_query.register(timezone_callback, lambda c: c.data.startswith("tz_"))
-    dp.callback_query.register(button_handler)
 
     asyncio.create_task(reminder_loop(bot))
     await dp.start_polling(bot)
+
 
 if __name__ == "__main__":
     asyncio.run(main())
