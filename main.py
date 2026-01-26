@@ -210,20 +210,20 @@ async def reminder_loop(bot: Bot):
         now_utc = datetime.utcnow()
         users = get_users_with_review_time()
 
-        for user_id, tg_id, review_time in users:
-            user = get_user(tg_id)
+        for user_id, telegram_id, review_time in users:
+            user = get_user(telegram_id)
             tz = user[6] or 0
             now = (now_utc + timedelta(hours=tz)).strftime("%H:%M")
 
             if now == "13:00":
                 await bot.send_message(
-                    tg_id,
+                    telegram_id,
                     "Как твои ногти?",
                     reply_markup=checkin_keyboard(user_id)
                 )
 
             if review_time == now:
-                await bot.send_message(tg_id, "Время вечернего разбора /review")
+                await bot.send_message(telegram_id, "Время вечернего разбора /review")
 
         await asyncio.sleep(60)
 
