@@ -16,9 +16,19 @@ def init_db():
             max_streak INTEGER DEFAULT 0,
             last_clean_day TEXT,
             review_time TEXT,
+            timezone_offset INTEGER DEFAULT 3,
             created_at TEXT
         )
     """)
+    
+    # Add timezone_offset column if it doesn't exist (for existing databases)
+    try:
+        cursor.execute("ALTER TABLE users ADD COLUMN timezone_offset INTEGER DEFAULT 3")
+        # Update existing users to have default timezone (Moscow UTC+3)
+        cursor.execute("UPDATE users SET timezone_offset = 3 WHERE timezone_offset IS NULL")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass  # Column already exists
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS events (
@@ -89,5 +99,18 @@ def get_users_with_review_time():
     return cursor.fetchall()
 
 def get_all_users():
-    cursor.execute("SELECT id, telegram_id FROM users")
+    cursor.execute("SELECT id, telegram_id, timezone_offset FROM users")
+    return cursor.fetchall()
+
+def set_timezone(user_id, offset):
+    cursor.execute(
+        "UPDATE users SET timezone_offset = ? WHERE id = ?",
+        (offset, user_id)
+    )
+    conn.commit()
+
+def get_users_with_review_time_and_tz():
+    cursor.execute(
+        "SELECT id, telegram_id, review_time, timezone_offset FROM users WHERE review_time IS NOT NULL"
+    )
     return cursor.fetchall()
