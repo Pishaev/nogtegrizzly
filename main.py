@@ -128,7 +128,7 @@ async def pogryz_start(message: Message, state: FSMContext):
 async def save_pogryz(message: Message, state: FSMContext):
     user = get_user(message.from_user.id)
     add_event(user[0], message.text)
-    await message.answer("Событие записано ✅", reply_markup=main_keyboard())
+    await message.answer("Событие записано ✅", reply_markup=main_keyboard(message.from_user.id == ADMIN_ID))
     await state.clear()
 
 
