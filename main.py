@@ -1,7 +1,7 @@
 import asyncio
 import re
 import os
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from aiogram import Bot, Dispatcher
 from aiogram.filters import Command
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
@@ -10,12 +10,10 @@ from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 
-from datetime import datetime, timezone, timedelta
-
 from db import (
     init_db, create_user, get_user, add_event,
     get_today_events, save_analysis, set_review_time,
-    get_users_with_review_time, conn
+    get_users_with_review_time, get_all_users, conn
 )
 
 moscow_tz = timezone(timedelta(hours=3))
@@ -35,6 +33,9 @@ class TimeState(StatesGroup):
     waiting_time = State()
 
 class CallbackState(StatesGroup):
+    waiting_text = State()
+
+class CheckinNibblingState(StatesGroup):
     waiting_text = State()
 
 
@@ -114,6 +115,13 @@ async def start_button_handler(callback: CallbackQuery, state: FSMContext):
     )
     await start(fake_msg, state)
 
+def checkin_keyboard(user_id):
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="Great!", callback_data=f"checkin_great_{user_id}"),
+            InlineKeyboardButton(text="Just a little nibbling.", callback_data=f"checkin_nibbling_{user_id}")
+        ]
+    ])
 
 # --- /pogryz ---
 async def pogryz_start(message: Message, state: FSMContext):
@@ -201,6 +209,19 @@ async def reminder_loop(bot: Bot):
     while True:
         now = datetime.now(moscow_tz)
         now_str = now.strftime("%H:%M")
+        
+        # 1:00 PM check-in notification
+        if now_str == "13:00":
+            all_users = get_all_users()
+            for user_id, tg_id in all_users:
+                keyboard = checkin_keyboard(user_id)
+                await bot.send_message(
+                    tg_id,
+                    "How are you?",
+                    reply_markup=keyboard
+                )
+        
+        # Evening review reminders
         users = get_users_with_review_time()
         for user_id, tg_id, review_time in users:
             if review_time == now_str:
@@ -228,8 +249,38 @@ async def reminder_loop(bot: Bot):
 
 # --- Кнопки Да/Нет и сохранение текста ---
 async def button_handler(callback: CallbackQuery, state: FSMContext):
+    # Handle check-in buttons (Great! / Just a little nibbling)
+    if callback.data.startswith("checkin_great_"):
+        user_id = int(callback.data.split("_")[2])
+        await callback.message.edit_reply_markup(None)
+        await callback.message.answer(
+            "That's wonderful! Keep up the great work! You're doing amazing! 💪✨"
+        )
+        await callback.answer()
+        return
+    
+    if callback.data.startswith("checkin_nibbling_"):
+        user_id = int(callback.data.split("_")[2])
+        await callback.message.edit_reply_markup(None)
+        await callback.message.answer(
+            "I understand. Please write what happened:"
+        )
+        await state.set_state(CheckinNibblingState.waiting_text)
+        await state.update_data(user_id=user_id)
+        await callback.answer()
+        return
+    
+    # Handle evening review buttons (Да/Нет)
+    if not (callback.data.startswith("yes_") or callback.data.startswith("no_")):
+        await callback.answer("Unknown callback")
+        return
+    
     user_id = int(callback.data.split("_")[1])
     user = get_user(callback.from_user.id)
+    if not user:
+        await callback.answer("User not found")
+        return
+    
     await callback.message.edit_reply_markup(None)
 
     if callback.data.startswith("yes_"):
@@ -258,9 +309,9 @@ async def save_callback_text(message: Message, state: FSMContext):
     data = await state.get_data()
     user_id = data.get("user_id")
     add_event(user_id, message.text)
-    await state.clear()
     user = get_user(message.from_user.id)
     events = get_today_events(user[0])
+    await state.clear()
     if not events:
         await message.answer("Сегодня нет записанных моментов. Это хороший знак 💪")
         return
@@ -271,6 +322,22 @@ async def save_callback_text(message: Message, state: FSMContext):
         "Что стало причиной? Какие чувства были?"
     )
     await state.set_state(ReviewState.waiting_analysis)
+
+
+async def save_checkin_nibbling(message: Message, state: FSMContext):
+    data = await state.get_data()
+    user_id = data.get("user_id")
+    user = get_user(message.from_user.id)
+    if not user or user[0] != user_id:
+        await message.answer("Error: User mismatch. Please try again.")
+        await state.clear()
+        return
+    # Log the message for evening review
+    add_event(user_id, f"[1 PM Check-in] {message.text}")
+    await message.answer(
+        "Thank you for sharing. I've logged this for your evening review. Take care! 💙"
+    )
+    await state.clear()
 
 
 async def keyboard_handler(message: Message, state: FSMContext):
@@ -338,6 +405,7 @@ async def main():
     dp.message.register(save_review_answer, ReviewState.waiting_analysis)
     dp.message.register(save_time, TimeState.waiting_time)
     dp.message.register(save_callback_text, CallbackState.waiting_text)
+    dp.message.register(save_checkin_nibbling, CheckinNibblingState.waiting_text)
 
     dp.callback_query.register(button_handler)
     dp.callback_query.register(start_button_handler, lambda c: c.data == "start_bot")

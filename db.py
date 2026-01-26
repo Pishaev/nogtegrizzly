@@ -87,3 +87,7 @@ def get_users_with_review_time():
         "SELECT id, telegram_id, review_time FROM users WHERE review_time IS NOT NULL"
     )
     return cursor.fetchall()
+
+def get_all_users():
+    cursor.execute("SELECT id, telegram_id FROM users")
+    return cursor.fetchall()
