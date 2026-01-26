@@ -1,3 +1,4 @@
+
 import sqlite3
 from datetime import datetime, date
 
@@ -15,9 +16,7 @@ def init_db():
             max_streak INTEGER DEFAULT 0,
             last_clean_day TEXT,
             review_time TEXT,
-            created_at TEXT,
-            timezone INTEGER DEFAULT 0
-
+            created_at TEXT
         )
     """)
 
@@ -47,13 +46,6 @@ def create_user(tg_id):
         VALUES (?, ?, ?)
         """,
         (tg_id, date.today().isoformat(), datetime.now().isoformat())
-    )
-    conn.commit()
-
-def set_timezone(user_id, tz):
-    cursor.execute(
-        "UPDATE users SET timezone = ? WHERE id = ?",
-        (tz, user_id)
     )
     conn.commit()
 
