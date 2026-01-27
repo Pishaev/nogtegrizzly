@@ -14,7 +14,7 @@ from db import (
     init_db, create_user, get_user, add_event,
     get_today_events, save_analysis, set_review_time,
     get_users_with_review_time, get_all_users, set_timezone,
-    get_users_with_review_time_and_tz, conn
+    get_users_with_review_time_and_tz, get_connection, return_connection
 )
 
 moscow_tz = timezone(timedelta(hours=3))
@@ -265,12 +265,16 @@ async def save_review_answer(message: Message, state: FSMContext):
             "Что стало причиной? Какие чувства и мысли были в этот момент? 🤔"
         )
     else:
-        cur = conn.cursor()
-        cur.execute(
-            "UPDATE users SET current_streak = 0 WHERE id = ?",
-            (user[0],)
-        )
-        conn.commit()
+        conn = get_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                "UPDATE users SET current_streak = 0 WHERE id = %s",
+                (user[0],)
+            )
+            conn.commit()
+        finally:
+            return_connection(conn)
 
         await message.answer(
             "🎉 Отлично! Ты разобрал все моменты дня!\n\n"
@@ -443,12 +447,16 @@ async def button_handler(callback: CallbackQuery, state: FSMContext):
     if callback.data.startswith("yes_"):
         current_streak = (user[2] or 0) + 1
         max_streak = max(user[3] or 0, current_streak)
-        cur = conn.cursor()
-        cur.execute(
-            "UPDATE users SET current_streak = ?, max_streak = ?, last_clean_day = ? WHERE id = ?",
-            (current_streak, max_streak, datetime.now().date().isoformat(), user[0])
-        )
-        conn.commit()
+        conn = get_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                "UPDATE users SET current_streak = %s, max_streak = %s, last_clean_day = %s WHERE id = %s",
+                (current_streak, max_streak, datetime.now().date().isoformat(), user[0])
+            )
+            conn.commit()
+        finally:
+            return_connection(conn)
         await callback.message.answer(
             f"🎉 Молодец! Продолжай в том же духе! 💪\n\n"
             f"📊 Твоя статистика:\n"
@@ -543,31 +551,35 @@ async def admin_stats(message: Message):
     if message.from_user.id != ADMIN_ID:
         return
 
-    cur = conn.cursor()
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
 
-    # Всего пользователей
-    cur.execute("SELECT COUNT(*) FROM users")
-    users_count = cur.fetchone()[0]
+        # Всего пользователей
+        cur.execute("SELECT COUNT(*) FROM users")
+        users_count = cur.fetchone()[0]
 
-    # Новые сегодня
-    today = datetime.now().date().isoformat()
-    cur.execute(
-        "SELECT COUNT(*) FROM users WHERE created_at LIKE ?",
-        (f"{today}%",)
-    )
-    new_today = cur.fetchone()[0]
+        # Новые сегодня
+        today = datetime.now().date().isoformat()
+        cur.execute(
+            "SELECT COUNT(*) FROM users WHERE created_at LIKE %s",
+            (f"{today}%",)
+        )
+        new_today = cur.fetchone()[0]
 
-    # Всего событий
-    cur.execute("SELECT COUNT(*) FROM events")
-    events_count = cur.fetchone()[0]
+        # Всего событий
+        cur.execute("SELECT COUNT(*) FROM events")
+        events_count = cur.fetchone()[0]
 
-    # Активные сегодня
-    cur.execute("""
-        SELECT COUNT(DISTINCT user_id)
-        FROM events
-        WHERE datetime LIKE ?
-    """, (f"{today}%",))
-    active_today = cur.fetchone()[0]
+        # Активные сегодня
+        cur.execute("""
+            SELECT COUNT(DISTINCT user_id)
+            FROM events
+            WHERE datetime LIKE %s
+        """, (f"{today}%",))
+        active_today = cur.fetchone()[0]
+    finally:
+        return_connection(conn)
 
     await message.answer(
         "📊 *Статистика бота*\n\n"
