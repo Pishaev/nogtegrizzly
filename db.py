@@ -40,7 +40,27 @@ def get_connection():
 
 def return_connection(conn):
     """Return connection to the pool"""
-    connection_pool.putconn(conn)
+    # Ensure transaction is properly closed before returning
+    try:
+        # Rollback any open transaction to clean state
+        if conn.info.transaction_status != 0:  # Not IDLE
+            conn.rollback()
+    except Exception:
+        # If we can't rollback, the connection might be bad
+        # Try to close it instead of returning to pool
+        try:
+            conn.close()
+            return  # Don't return bad connection to pool
+        except Exception:
+            pass
+    try:
+        connection_pool.putconn(conn)
+    except Exception:
+        # If we can't return to pool, close the connection
+        try:
+            conn.close()
+        except Exception:
+            pass
 
 
 # --- Инициализация базы ---
