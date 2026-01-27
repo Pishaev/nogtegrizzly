@@ -11,13 +11,7 @@ from datetime import datetime, date
 
 # --- Подключение к базе ---
 # Get DATABASE_URL from environment variable (Railway provides this)
-DATABASE_URL = os.environ.get("DATABASE_URL")
-
-if not DATABASE_URL:
-    raise ValueError(
-        "DATABASE_URL environment variable is not set. "
-        "Please set it in your Railway environment variables."
-    )
+# Don't check at import time - check when actually using the database
 
 # Connection pool for better performance
 connection_pool = None
@@ -25,9 +19,17 @@ connection_pool = None
 def get_connection():
     """Get a connection from the pool"""
     global connection_pool
+    
+    # Get DATABASE_URL when actually needed
+    DATABASE_URL = os.environ.get("DATABASE_URL")
+    
+    if not DATABASE_URL:
+        raise ValueError(
+            "DATABASE_URL environment variable is not set. "
+            "Please set it in your Railway environment variables."
+        )
+    
     if connection_pool is None:
-        if not DATABASE_URL:
-            raise ValueError("DATABASE_URL is not set")
         # Create connection pool using DATABASE_URL directly
         connection_pool = ConnectionPool(
             DATABASE_URL,
