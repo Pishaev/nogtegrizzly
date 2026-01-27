@@ -1,7 +1,12 @@
 
 import os
 import psycopg
-from psycopg import pool
+try:
+    from psycopg_pool import ConnectionPool
+except ImportError:
+    # Fallback if pool package not available
+    from psycopg import pool
+    ConnectionPool = pool.ConnectionPool
 from datetime import datetime, date
 
 # --- Подключение к базе ---
@@ -24,7 +29,7 @@ def get_connection():
         if not DATABASE_URL:
             raise ValueError("DATABASE_URL is not set")
         # Create connection pool using DATABASE_URL directly
-        connection_pool = psycopg.pool.ConnectionPool(
+        connection_pool = ConnectionPool(
             DATABASE_URL,
             min_size=1,
             max_size=20
