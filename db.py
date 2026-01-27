@@ -1,9 +1,8 @@
 
 import os
-import psycopg2
-from psycopg2 import pool
+import psycopg
+from psycopg import pool
 from datetime import datetime, date
-from urllib.parse import urlparse
 
 # --- Подключение к базе ---
 # Get DATABASE_URL from environment variable (Railway provides this)
@@ -24,15 +23,11 @@ def get_connection():
     if connection_pool is None:
         if not DATABASE_URL:
             raise ValueError("DATABASE_URL is not set")
-        # Parse DATABASE_URL
-        result = urlparse(DATABASE_URL)
-        connection_pool = psycopg2.pool.SimpleConnectionPool(
-            1, 20,
-            host=result.hostname,
-            port=result.port,
-            database=result.path[1:],  # Remove leading '/'
-            user=result.username,
-            password=result.password
+        # Create connection pool using DATABASE_URL directly
+        connection_pool = psycopg.pool.ConnectionPool(
+            DATABASE_URL,
+            min_size=1,
+            max_size=20
         )
     return connection_pool.getconn()
 
