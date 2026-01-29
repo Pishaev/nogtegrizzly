@@ -616,6 +616,26 @@ async def admin_stats(message: Message):
 
 
 
+# --- Рассылка актуального меню при старте бота ---
+async def broadcast_keyboard_on_startup(bot: Bot):
+    """При каждом деплое отправляет всем пользователям актуальное меню."""
+    try:
+        users = get_all_users()
+        for user_id, tg_id, _ in users:
+            try:
+                is_admin = tg_id == ADMIN_ID
+                await bot.send_message(
+                    tg_id,
+                    "✅ Бот обновлён! Вот актуальное меню 👇",
+                    reply_markup=main_keyboard(is_admin=is_admin)
+                )
+                await asyncio.sleep(0.05)  # Небольшая пауза, чтобы не упереться в лимиты
+            except Exception:
+                pass  # Пользователь заблокировал бота или другая ошибка — пропускаем
+    except Exception:
+        pass  # Ошибка при получении пользователей — не падаем при старте
+
+
 # --- main ---
 async def main():
     bot = Bot(token=BOT_TOKEN)
@@ -634,6 +654,9 @@ async def main():
     dp.callback_query.register(start_button_handler, lambda c: c.data == "start_bot")
 
     dp.message.register(keyboard_handler)
+
+    # При старте отправляем всем пользователям актуальное меню (после деплоя не нужен /start)
+    asyncio.create_task(broadcast_keyboard_on_startup(bot))
 
     asyncio.create_task(reminder_loop(bot))
     await dp.start_polling(bot)
