@@ -374,7 +374,7 @@ async def reminder_loop(bot: Bot):
                             "🌙 Время вечернего разбора!\n\n"
                             "У тебя есть записанные события за сегодня. "
                             "Давай разберём их вместе! 💙\n\n"
-                            "Используй команду /review или кнопку ниже 👇"
+                            "Используй команду /review"
                         )
                     else:
                         keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -537,16 +537,9 @@ async def keyboard_handler(message: Message, state: FSMContext):
     if message.text == "📌 Записать момент":
         await pogryz_start(message, state)
     elif message.text == "⚙️ Настройки":
-        await message.answer(
-            "⚙️ Настройки\n\n"
-            "Выбери, что хочешь настроить:",
-            reply_markup=settings_keyboard(message.from_user.id == ADMIN_ID)
-        )
+        await message.answer("👆", reply_markup=settings_keyboard(message.from_user.id == ADMIN_ID))
     elif message.text == "◀️ Назад":
-        await message.answer(
-            "Главное меню",
-            reply_markup=main_keyboard(message.from_user.id == ADMIN_ID)
-        )
+        await message.answer("👆", reply_markup=main_keyboard(message.from_user.id == ADMIN_ID))
     elif message.text == "⏰ Изменить время вечернего разбора":
         await message.answer(
             "⏰ Настройка времени вечернего разбора\n\n"
