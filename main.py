@@ -63,13 +63,26 @@ class TimezoneState(StatesGroup):
 def main_keyboard(is_admin=False):
     keyboard = [
         [KeyboardButton(text="📌 Записать момент")],
-        [KeyboardButton(text="⏰ Изменить время вечернего разбора")],
-        [KeyboardButton(text="🌍 Изменить часовой пояс")]
+        [KeyboardButton(text="⚙️ Настройки")]
     ]
 
     if is_admin:
         keyboard.append([KeyboardButton(text="📊 Статистика бота")])
 
+    return ReplyKeyboardMarkup(
+        keyboard=keyboard,
+        resize_keyboard=True,
+        one_time_keyboard=False
+    )
+
+
+def settings_keyboard(is_admin=False):
+    """Клавиатура настроек (время разбора, часовой пояс, назад)"""
+    keyboard = [
+        [KeyboardButton(text="⏰ Изменить время вечернего разбора")],
+        [KeyboardButton(text="🌍 Изменить часовой пояс")],
+        [KeyboardButton(text="◀️ Назад")]
+    ]
     return ReplyKeyboardMarkup(
         keyboard=keyboard,
         resize_keyboard=True,
@@ -131,8 +144,7 @@ async def start(message: Message, state: FSMContext):
         "**Как я работаю:**\n\n"
         "1️⃣ 📌 Записать момент — если что-то произошло, просто запиши это\n"
         "2️⃣ 🌙 Вечерний разбор — я буду напоминать вечером для анализа дня\n"
-        "3️⃣ 📊 Статистика — отслеживай свои успехи и серии дней\n"
-        "4️⃣ ⏰ Настройки — установи удобное время для напоминаний\n\n"
+        "3️⃣ ⚙️ Настройки — время напоминаний и часовой пояс\n\n"
         "Вместе мы справимся! 💪✨\n"
     )
 
@@ -524,11 +536,23 @@ async def save_checkin_nibbling(message: Message, state: FSMContext):
 async def keyboard_handler(message: Message, state: FSMContext):
     if message.text == "📌 Записать момент":
         await pogryz_start(message, state)
+    elif message.text == "⚙️ Настройки":
+        await message.answer(
+            "⚙️ Настройки\n\n"
+            "Выбери, что хочешь настроить:",
+            reply_markup=settings_keyboard(message.from_user.id == ADMIN_ID)
+        )
+    elif message.text == "◀️ Назад":
+        await message.answer(
+            "Главное меню",
+            reply_markup=main_keyboard(message.from_user.id == ADMIN_ID)
+        )
     elif message.text == "⏰ Изменить время вечернего разбора":
         await message.answer(
             "⏰ Настройка времени вечернего разбора\n\n"
             "Напиши новое время в формате ЧЧ:ММ\n"
-            "Например: 21:30"
+            "Например: 21:30",
+            reply_markup=settings_keyboard(message.from_user.id == ADMIN_ID)
         )
         await state.set_state(TimeState.waiting_time)
     elif message.text == "🌍 Изменить часовой пояс":
