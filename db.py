@@ -79,7 +79,8 @@ def init_db():
                 last_clean_day VARCHAR(10),
                 review_time VARCHAR(5),
                 timezone_offset INTEGER DEFAULT 3,
-                created_at VARCHAR(50)
+                created_at VARCHAR(50),
+                name VARCHAR(100)
             )
         """)
         
@@ -93,6 +94,32 @@ def init_db():
                 ) THEN
                     ALTER TABLE users ADD COLUMN timezone_offset INTEGER DEFAULT 3;
                     UPDATE users SET timezone_offset = 3 WHERE timezone_offset IS NULL;
+                END IF;
+            END $$;
+        """)
+
+        # Add name column if it doesn't exist (for existing databases)
+        cursor.execute("""
+            DO $$ 
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns 
+                    WHERE table_name='users' AND column_name='name'
+                ) THEN
+                    ALTER TABLE users ADD COLUMN name VARCHAR(100);
+                END IF;
+            END $$;
+        """)
+
+        # Add is_female column if it doesn't exist (for feminine endings in messages)
+        cursor.execute("""
+            DO $$ 
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns 
+                    WHERE table_name='users' AND column_name='is_female'
+                ) THEN
+                    ALTER TABLE users ADD COLUMN is_female BOOLEAN;
                 END IF;
             END $$;
         """)
@@ -242,6 +269,30 @@ def set_timezone(user_id, offset):
         cursor.execute(
             "UPDATE users SET timezone_offset = %s WHERE id = %s",
             (offset, user_id)
+        )
+        conn.commit()
+    finally:
+        return_connection(conn)
+
+def set_user_name(user_id, name):
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE users SET name = %s WHERE id = %s",
+            (name.strip()[:100], user_id)
+        )
+        conn.commit()
+    finally:
+        return_connection(conn)
+
+def set_user_is_female(user_id, is_female):
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE users SET is_female = %s WHERE id = %s",
+            (bool(is_female), user_id)
         )
         conn.commit()
     finally:
