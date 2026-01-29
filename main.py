@@ -537,9 +537,9 @@ async def keyboard_handler(message: Message, state: FSMContext):
     if message.text == "📌 Записать момент":
         await pogryz_start(message, state)
     elif message.text == "⚙️ Настройки":
-        await message.answer("\u200b", reply_markup=settings_keyboard(message.from_user.id == ADMIN_ID))
+        await message.answer(" ", reply_markup=settings_keyboard(message.from_user.id == ADMIN_ID))
     elif message.text == "◀️ Назад":
-        await message.answer("\u200b", reply_markup=main_keyboard(message.from_user.id == ADMIN_ID))
+        await message.answer(" ", reply_markup=main_keyboard(message.from_user.id == ADMIN_ID))
     elif message.text == "⏰ Изменить время вечернего разбора":
         await message.answer(
             "⏰ Настройка времени вечернего разбора\n\n"
@@ -619,7 +619,7 @@ async def broadcast_keyboard_on_startup(bot: Bot):
                 is_admin = tg_id == ADMIN_ID
                 await bot.send_message(
                     tg_id,
-                    "✅ Бот обновлён! Вот актуальное меню 👇",
+                    " ",
                     reply_markup=main_keyboard(is_admin=is_admin)
                 )
                 await asyncio.sleep(0.05)  # Небольшая пауза, чтобы не упереться в лимиты
