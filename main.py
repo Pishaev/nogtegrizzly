@@ -596,6 +596,21 @@ async def button_handler(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_reply_markup(None)
 
     if callback.data.startswith("yes_"):
+        today = datetime.now().date().isoformat()
+        last_clean = user[4]  # last_clean_day — уже считали этот день?
+        if last_clean == today:
+            # Уже начислен +1 за сегодня (например, ответили «Да» на первом напоминании, потом сменили время)
+            name = get_display_name(user)
+            current_streak = user[2] or 0
+            max_streak = user[3] or 0
+            await callback.message.answer(
+                f"👍 Отлично, {name}! Вы уже отметили этот день без грызения.\n\n"
+                f"📊 Ваша статистика без изменений:\n"
+                f"• Текущая серия: {current_streak} {'день' if current_streak == 1 else 'дней' if current_streak < 5 else 'дней'} 🔥\n"
+                f"• Максимальная серия: {max_streak} {'день' if max_streak == 1 else 'дней' if max_streak < 5 else 'дней'} ⭐"
+            )
+            await callback.answer()
+            return
         current_streak = (user[2] or 0) + 1
         max_streak = max(user[3] or 0, current_streak)
         conn = get_connection()
@@ -603,7 +618,7 @@ async def button_handler(callback: CallbackQuery, state: FSMContext):
             cur = conn.cursor()
             cur.execute(
                 "UPDATE users SET current_streak = %s, max_streak = %s, last_clean_day = %s WHERE id = %s",
-                (current_streak, max_streak, datetime.now().date().isoformat(), user[0])
+                (current_streak, max_streak, today, user[0])
             )
             conn.commit()
         finally:
