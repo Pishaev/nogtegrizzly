@@ -537,9 +537,15 @@ async def keyboard_handler(message: Message, state: FSMContext):
     if message.text == "📌 Записать момент":
         await pogryz_start(message, state)
     elif message.text == "⚙️ Настройки":
-        await message.answer(" ", reply_markup=settings_keyboard(message.from_user.id == ADMIN_ID))
+        await message.answer(
+            "⚙️ Настройки\n\nВыбери, что хочешь настроить:",
+            reply_markup=settings_keyboard(message.from_user.id == ADMIN_ID)
+        )
     elif message.text == "◀️ Назад":
-        await message.answer(" ", reply_markup=main_keyboard(message.from_user.id == ADMIN_ID))
+        await message.answer(
+            "◀️ Назад",
+            reply_markup=main_keyboard(message.from_user.id == ADMIN_ID)
+        )
     elif message.text == "⏰ Изменить время вечернего разбора":
         await message.answer(
             "⏰ Настройка времени вечернего разбора\n\n"
