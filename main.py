@@ -4,11 +4,12 @@ import os
 from datetime import datetime, timezone, timedelta
 from aiogram import Bot, Dispatcher
 from aiogram.filters import Command
-from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, Update
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+from aiogram import BaseMiddleware
 
 from db import (
     init_db, create_user, get_user, add_event,
@@ -635,10 +636,32 @@ async def broadcast_keyboard_on_startup(bot: Bot):
         pass  # Ошибка при получении пользователей — не падаем при старте
 
 
+# --- Защита от дублирования сообщений (один update обрабатываем один раз) ---
+PROCESSED_UPDATE_IDS = set()
+MAX_PROCESSED_IDS = 5000
+
+
+class DeduplicationMiddleware(BaseMiddleware):
+    """Пропускает уже обработанные update_id — убирает двойные ответы."""
+
+    async def __call__(self, handler, event, data):
+        if isinstance(event, Update):
+            uid = event.update_id
+            if uid in PROCESSED_UPDATE_IDS:
+                return  # Уже обрабатывали — не отвечаем повторно
+            PROCESSED_UPDATE_IDS.add(uid)
+            if len(PROCESSED_UPDATE_IDS) > MAX_PROCESSED_IDS:
+                PROCESSED_UPDATE_IDS.clear()
+        return await handler(event, data)
+
+
 # --- main ---
 async def main():
     bot = Bot(token=BOT_TOKEN)
     dp = Dispatcher(storage=MemoryStorage())
+
+    # Сначала ставим защиту от дублей
+    dp.update.outer_middleware(DeduplicationMiddleware())
 
     dp.message.register(start, Command("start"))
     dp.message.register(pogryz_start, Command("pogryz"))
