@@ -120,7 +120,6 @@ class GenderState(StatesGroup):
 def main_keyboard(is_admin=False):
     keyboard = [
         [KeyboardButton(text="📌 Записать момент")],
-        [KeyboardButton(text="💳 Подписка")],
         [KeyboardButton(text="⚙️ Настройки")]
     ]
 
@@ -135,8 +134,9 @@ def main_keyboard(is_admin=False):
 
 
 def settings_keyboard(is_admin=False):
-    """Клавиатура настроек (время разбора, часовой пояс, назад)"""
+    """Клавиатура настроек (подписка, время разбора, часовой пояс, назад)"""
     keyboard = [
+        [KeyboardButton(text="💳 Подписка")],
         [KeyboardButton(text="⏰ Изменить время вечернего разбора")],
         [KeyboardButton(text="🌍 Изменить часовой пояс")],
         [KeyboardButton(text="◀️ Назад")]
