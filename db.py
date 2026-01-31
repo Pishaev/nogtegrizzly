@@ -124,6 +124,45 @@ def init_db():
             END $$;
         """)
 
+        # Subscription: end date (inclusive), trial used once
+        cursor.execute("""
+            DO $$ 
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns 
+                    WHERE table_name='users' AND column_name='subscription_ends_at'
+                ) THEN
+                    ALTER TABLE users ADD COLUMN subscription_ends_at VARCHAR(10);
+                END IF;
+            END $$;
+        """)
+        cursor.execute("""
+            DO $$ 
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns 
+                    WHERE table_name='users' AND column_name='trial_used'
+                ) THEN
+                    ALTER TABLE users ADD COLUMN trial_used BOOLEAN DEFAULT FALSE;
+                END IF;
+            END $$;
+        """)
+
+        # Payments table for YooKassa: link payment_id -> user_id (webhook)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS payments (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                yookassa_payment_id VARCHAR(100) UNIQUE NOT NULL,
+                amount_cents INTEGER NOT NULL,
+                status VARCHAR(20) DEFAULT 'pending',
+                created_at VARCHAR(50) NOT NULL
+            )
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_payments_yookassa_id ON payments(yookassa_payment_id);
+        """)
+
         # Create events table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS events (
@@ -308,5 +347,81 @@ def get_users_with_review_time_and_tz():
         rows = cursor.fetchall()
         # rows are already tuples
         return rows
+    finally:
+        return_connection(conn)
+
+
+# --- Подписка ---
+def set_subscription_ends_at(user_id, date_str):
+    """date_str: YYYY-MM-DD, subscription active until end of this day (inclusive)."""
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE users SET subscription_ends_at = %s WHERE id = %s",
+            (date_str, user_id)
+        )
+        conn.commit()
+    finally:
+        return_connection(conn)
+
+def set_trial_used(user_id, used=True):
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE users SET trial_used = %s WHERE id = %s",
+            (bool(used), user_id)
+        )
+        conn.commit()
+    finally:
+        return_connection(conn)
+
+def get_user_by_id(user_id):
+    """Get user row by internal id (for webhook)."""
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM users WHERE id = %s", (user_id,))
+        return cursor.fetchone()
+    finally:
+        return_connection(conn)
+
+
+# --- Платежи YooKassa (для вебхука) ---
+def create_payment(user_id, yookassa_payment_id, amount_cents):
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """INSERT INTO payments (user_id, yookassa_payment_id, amount_cents, status, created_at)
+               VALUES (%s, %s, %s, 'pending', %s)""",
+            (user_id, yookassa_payment_id, amount_cents, datetime.now().isoformat())
+        )
+        conn.commit()
+    finally:
+        return_connection(conn)
+
+def get_payment_by_yookassa_id(yookassa_payment_id):
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT id, user_id, yookassa_payment_id, status FROM payments WHERE yookassa_payment_id = %s",
+            (yookassa_payment_id,)
+        )
+        return cursor.fetchone()
+    finally:
+        return_connection(conn)
+
+def mark_payment_succeeded(payment_id):
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE payments SET status = 'succeeded' WHERE id = %s",
+            (payment_id,)
+        )
+        conn.commit()
     finally:
         return_connection(conn)

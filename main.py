@@ -1,7 +1,8 @@
 import asyncio
 import re
 import os
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta, date
+from aiohttp import web
 from aiogram import Bot, Dispatcher
 from aiogram.filters import Command
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, Update
@@ -16,7 +17,9 @@ from db import (
     get_today_events, save_analysis, set_review_time,
     get_users_with_review_time, get_all_users, set_timezone,
     get_users_with_review_time_and_tz, get_connection, return_connection,
-    set_user_name, set_user_is_female
+    set_user_name, set_user_is_female,
+    set_subscription_ends_at, set_trial_used, get_user_by_id,
+    create_payment as db_create_payment, get_payment_by_yookassa_id, mark_payment_succeeded
 )
 
 moscow_tz = timezone(timedelta(hours=3))
@@ -62,6 +65,30 @@ def get_display_name(user):
 def praise_word(user):
     """«Молодец» или «Умница» в зависимости от пола пользователя."""
     return "Умница" if get_user_is_female(user) else "Молодец"
+
+# --- Подписка (user tuple: ... index 10 = subscription_ends_at, 11 = trial_used) ---
+def get_subscription_ends_at(user):
+    """Дата окончания подписки (YYYY-MM-DD) или None."""
+    if len(user) > 10 and user[10]:
+        return user[10]
+    return None
+
+def get_trial_used(user):
+    """Использован ли пробный период."""
+    if len(user) > 11 and user[11] is not None:
+        return bool(user[11])
+    return False
+
+def has_active_subscription(user):
+    """Подписка активна (включая пробный период): сегодня <= subscription_ends_at."""
+    end = get_subscription_ends_at(user)
+    if not end:
+        return False
+    try:
+        end_date = date.fromisoformat(end)
+        return date.today() <= end_date
+    except (ValueError, TypeError):
+        return False
 
 # --- FSM States ---
 class PogryzState(StatesGroup):
@@ -183,6 +210,30 @@ def gender_keyboard():
             InlineKeyboardButton(text="Мужской", callback_data="gender_no")
         ]
     ])
+
+# --- Подписка: кнопки оплаты и пробного периода ---
+SUBSCRIPTION_PRICE_RUB = 199
+TRIAL_DAYS = 3
+
+def subscription_keyboard(user):
+    """Клавиатура подписки: оплата 199 ₽ и пробный период (если ещё не использован)."""
+    buttons = [[InlineKeyboardButton(text=f"Оформить подписку — {SUBSCRIPTION_PRICE_RUB} ₽/мес", callback_data="sub_pay")]]
+    if not get_trial_used(user):
+        buttons.append([InlineKeyboardButton(text="Попробовать 3 дня бесплатно", callback_data="sub_trial")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+def paywall_message():
+    return (
+        "⏳ Подписка не активна.\n\n"
+        "Чтобы пользоваться ботом (записывать моменты, вечерний разбор и напоминания), "
+        "оформите подписку или начните с пробного периода."
+    )
+
+async def send_paywall(target, user, is_admin: bool):
+    """target: message или callback.message. Показать оплату и/или пробный период."""
+    text = paywall_message()
+    kb = subscription_keyboard(user)
+    await target.answer(text, reply_markup=kb)
 
 async def send_welcome_and_next(reply_target, user, state: FSMContext, is_admin: bool):
     """Отправить приветствие и следующий шаг (время или настройки). reply_target — message или callback.message."""
@@ -346,6 +397,9 @@ async def start_review(message: Message, state: FSMContext):
     user = get_user(message.from_user.id)
     if not user:
         await message.answer("Напишите /start 🙌")
+        return
+    if message.from_user.id != ADMIN_ID and not has_active_subscription(user):
+        await send_paywall(message, user, message.from_user.id == ADMIN_ID)
         return
 
     events = get_today_events(user[0])
@@ -529,10 +583,83 @@ async def gender_callback_handler(callback: CallbackQuery, state: FSMContext):
     await send_welcome_and_next(callback.message, user, state, callback.from_user.id == ADMIN_ID)
     return True
 
+# --- Подписка: пробный период и оплата ---
+async def subscription_callback_handler(callback: CallbackQuery, state: FSMContext):
+    if callback.data == "sub_trial":
+        user = get_user(callback.from_user.id)
+        if not user:
+            await callback.answer("❌ Пользователь не найден")
+            return True
+        if get_trial_used(user):
+            await callback.answer("Пробный период уже использован.", show_alert=True)
+            return True
+        end_date = date.today() + timedelta(days=TRIAL_DAYS)
+        set_subscription_ends_at(user[0], end_date.isoformat())
+        set_trial_used(user[0], True)
+        try:
+            await callback.message.edit_reply_markup(None)
+        except Exception:
+            pass
+        name = get_display_name(user)
+        await callback.message.answer(
+            f"✅ Пробный период активирован, {name}!\n\n"
+            f"У Вас есть {TRIAL_DAYS} дня бесплатного доступа. "
+            f"Подписка действует до {end_date.strftime('%d.%m.%Y')}.\n\n"
+            "Можете пользоваться всеми функциями бота. 💙"
+        )
+        await callback.answer()
+        return True
+    if callback.data == "sub_pay":
+        user = get_user(callback.from_user.id)
+        if not user:
+            await callback.answer("❌ Пользователь не найден")
+            return True
+        shop_id = os.environ.get("YOOKASSA_SHOP_ID")
+        secret_key = os.environ.get("YOOKASSA_SECRET_KEY")
+        if not shop_id or not secret_key:
+            await callback.answer("Оплата временно недоступна. Напишите в поддержку.", show_alert=True)
+            return True
+        try:
+            from yookassa import Configuration, Payment
+            Configuration.configure(shop_id, secret_key)
+            amount_rub = str(SUBSCRIPTION_PRICE_RUB)
+            return_url = os.environ.get("YOOKASSA_RETURN_URL", "https://t.me/")
+            payment = Payment.create({
+                "amount": {"value": amount_rub, "currency": "RUB"},
+                "confirmation": {"type": "redirect", "return_url": return_url},
+                "description": "Подписка на 1 месяц",
+                "metadata": {"user_id": str(user[0])},
+            })
+            pay_id = payment.id
+            url = payment.confirmation.confirmation_url if payment.confirmation else None
+            if not url:
+                await callback.answer("Ошибка создания платежа.", show_alert=True)
+                return True
+            db_create_payment(user[0], pay_id, SUBSCRIPTION_PRICE_RUB * 100)
+            try:
+                await callback.message.edit_reply_markup(None)
+            except Exception:
+                pass
+            name = get_display_name(user)
+            await callback.message.answer(
+                f"Оплата подписки — {SUBSCRIPTION_PRICE_RUB} ₽/мес\n\n"
+                f"{name}, перейдите по ссылке и оплатите:\n{url}\n\n"
+                "После успешной оплаты подписка продлится автоматически. 💙"
+            )
+        except Exception as e:
+            await callback.answer("Ошибка при создании платежа. Попробуйте позже.", show_alert=True)
+            return True
+        await callback.answer()
+        return True
+    return False
+
 # --- Кнопки Да/Нет и сохранение текста ---
 async def button_handler(callback: CallbackQuery, state: FSMContext):
     # Handle gender selection (after name)
     if await gender_callback_handler(callback, state):
+        return
+    # Handle subscription (trial / pay)
+    if await subscription_callback_handler(callback, state):
         return
     # Handle timezone selection
     if callback.data.startswith("tz_"):
@@ -592,7 +719,12 @@ async def button_handler(callback: CallbackQuery, state: FSMContext):
     if not user:
         await callback.answer("❌ Пользователь не найден")
         return
-    
+    if callback.from_user.id != ADMIN_ID and not has_active_subscription(user):
+        await callback.message.edit_reply_markup(None)
+        await send_paywall(callback.message, user, False)
+        await callback.answer()
+        return
+
     await callback.message.edit_reply_markup(None)
 
     if callback.data.startswith("yes_"):
@@ -692,6 +824,13 @@ async def save_checkin_nibbling(message: Message, state: FSMContext):
 
 async def keyboard_handler(message: Message, state: FSMContext):
     if message.text == "📌 Записать момент":
+        user = get_user(message.from_user.id)
+        if not user:
+            await message.answer("Напишите /start 🙌")
+            return
+        if message.from_user.id != ADMIN_ID and not has_active_subscription(user):
+            await send_paywall(message, user, message.from_user.id == ADMIN_ID)
+            return
         await pogryz_start(message, state)
     elif message.text == "⚙️ Настройки":
         await message.answer(
@@ -792,6 +931,63 @@ async def broadcast_keyboard_on_startup(bot: Bot):
         pass  # Ошибка при получении пользователей — не падаем при старте
 
 
+# --- YooKassa webhook (подписка после оплаты) ---
+BOT_FOR_WEBHOOK = None  # устанавливается в main() для отправки сообщения пользователю
+
+async def yookassa_webhook(request):
+    """Обработчик POST от YooKassa: payment.succeeded -> продлить подписку."""
+    try:
+        body = await request.json()
+    except Exception:
+        return web.Response(status=400, text="Bad JSON")
+    event = body.get("event")
+    obj = body.get("object") or {}
+    payment_id_yookassa = obj.get("id")
+    if event != "payment.succeeded" or not payment_id_yookassa:
+        return web.Response(status=200, text="OK")
+    row = get_payment_by_yookassa_id(payment_id_yookassa)
+    if not row:
+        return web.Response(status=200, text="OK")
+    our_id, user_id, _, status = row
+    if status == "succeeded":
+        return web.Response(status=200, text="OK")
+    try:
+        from yookassa import Payment
+        pay = Payment.find_one(payment_id_yookassa)
+        if not pay or str(getattr(pay, "status", "")) != "succeeded":
+            return web.Response(status=200, text="OK")
+    except Exception:
+        return web.Response(status=200, text="OK")
+    mark_payment_succeeded(our_id)
+    user_row = get_user_by_id(user_id)
+    if not user_row:
+        return web.Response(status=200, text="OK")
+    today = date.today()
+    end_str = get_subscription_ends_at(user_row) if len(user_row) > 10 else None
+    if end_str:
+        try:
+            end_date = date.fromisoformat(end_str)
+            start = end_date if end_date >= today else today
+        except (ValueError, TypeError):
+            start = today
+    else:
+        start = today
+    new_end = start + timedelta(days=30)
+    set_subscription_ends_at(user_id, new_end.isoformat())
+    telegram_id = user_row[1]
+    if BOT_FOR_WEBHOOK:
+        try:
+            name = get_display_name(user_row)
+            await BOT_FOR_WEBHOOK.send_message(
+                telegram_id,
+                f"✅ Оплата прошла успешно, {name}!\n\n"
+                f"Подписка продлена до {new_end.strftime('%d.%m.%Y')}. Спасибо! 💙"
+            )
+        except Exception:
+            pass
+    return web.Response(status=200, text="OK")
+
+
 # --- Защита от дублирования сообщений (один update обрабатываем один раз) ---
 PROCESSED_UPDATE_IDS = set()
 MAX_PROCESSED_IDS = 5000
@@ -811,10 +1007,31 @@ class DeduplicationMiddleware(BaseMiddleware):
         return await handler(event, data)
 
 
+# --- Webhook-сервер для YooKassa ---
+async def start_webhook_server(port: int):
+    app = web.Application()
+    app.router.add_post("/webhook/yookassa", yookassa_webhook)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+    await asyncio.Future()  # run forever
+
+
 # --- main ---
 async def main():
+    global BOT_FOR_WEBHOOK
     bot = Bot(token=BOT_TOKEN)
+    BOT_FOR_WEBHOOK = bot
     dp = Dispatcher(storage=MemoryStorage())
+
+    # Webhook для YooKassa (если задан WEBHOOK_PORT)
+    webhook_port = os.environ.get("WEBHOOK_PORT")
+    if webhook_port:
+        try:
+            asyncio.create_task(start_webhook_server(int(webhook_port)))
+        except Exception:
+            pass
 
     # Сначала ставим защиту от дублей
     dp.update.outer_middleware(DeduplicationMiddleware())
