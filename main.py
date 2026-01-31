@@ -408,7 +408,8 @@ async def start_review(message: Message, state: FSMContext):
     if not events:
         await message.answer(
             f"🎉 Отлично, {name}! Сегодня нет записанных моментов!\n\n"
-            "Это значит, что Вы справляетесь! Продолжайте в том же духе! 💪✨"
+            "Это значит, что Вы справляетесь! Продолжайте в том же духе! 💪✨",
+            reply_markup=main_keyboard(message.from_user.id == ADMIN_ID)
         )
         return
 
@@ -458,7 +459,8 @@ async def save_review_answer(message: Message, state: FSMContext):
             f"🎉 Отлично, {name}! Вы разобрали все моменты дня!\n\n"
             "Это важный шаг к пониманию себя и своих триггеров. "
             "Каждый разбор делает Вас сильнее! 💪✨\n\n"
-            "Продолжайте работать над собой, у Вас всё получается! 🌟"
+            "Продолжайте работать над собой, у Вас всё получается! 🌟",
+            reply_markup=main_keyboard(message.from_user.id == ADMIN_ID)
         )
         await state.clear()
 
@@ -470,7 +472,8 @@ async def save_time(message: Message, state: FSMContext):
         await message.answer(
             "❌ Неверный формат времени.\n\n"
             "Пожалуйста, используйте формат ЧЧ:ММ\n"
-            "Например: 21:30"
+            "Например: 21:30",
+            reply_markup=settings_keyboard(message.from_user.id == ADMIN_ID)
         )
         return
 
@@ -606,7 +609,8 @@ async def subscription_callback_handler(callback: CallbackQuery, state: FSMConte
             f"✅ Пробный период активирован, {name}!\n\n"
             f"У Вас есть {TRIAL_DAYS} дня бесплатного доступа. "
             f"Подписка действует до {end_date.strftime('%d.%m.%Y')}.\n\n"
-            "Можете пользоваться всеми функциями бота. 💙"
+            "Можете пользоваться всеми функциями бота. 💙",
+            reply_markup=main_keyboard(callback.from_user.id == ADMIN_ID)
         )
         await callback.answer()
         return True
@@ -645,7 +649,8 @@ async def subscription_callback_handler(callback: CallbackQuery, state: FSMConte
             await callback.message.answer(
                 f"Оплата подписки — {SUBSCRIPTION_PRICE_RUB} ₽/мес\n\n"
                 f"{name}, перейдите по ссылке и оплатите:\n{url}\n\n"
-                "После успешной оплаты подписка продлится автоматически. 💙"
+                "После успешной оплаты подписка продлится автоматически. 💙",
+                reply_markup=main_keyboard(callback.from_user.id == ADMIN_ID)
             )
         except Exception as e:
             await callback.answer("Ошибка при создании платежа. Попробуйте позже.", show_alert=True)
@@ -693,7 +698,8 @@ async def button_handler(callback: CallbackQuery, state: FSMContext):
         await callback.message.answer(
             f"Это замечательно, {name}! 🎉\n\n"
             f"Вы {praise_word(user).lower()}, продолжайте в том же духе! Вы справляетесь отлично! 💪✨\n\n"
-            "Помните: каждый день без грызения — это маленькая победа! 🌟"
+            "Помните: каждый день без грызения — это маленькая победа! 🌟",
+            reply_markup=main_keyboard(callback.from_user.id == ADMIN_ID)
         )
         await callback.answer()
         return
@@ -740,7 +746,8 @@ async def button_handler(callback: CallbackQuery, state: FSMContext):
                 f"👍 Отлично, {name}! Вы уже отметили этот день без грызения.\n\n"
                 f"📊 Ваша статистика без изменений:\n"
                 f"• Текущая серия: {current_streak} {'день' if current_streak == 1 else 'дней' if current_streak < 5 else 'дней'} 🔥\n"
-                f"• Максимальная серия: {max_streak} {'день' if max_streak == 1 else 'дней' if max_streak < 5 else 'дней'} ⭐"
+                f"• Максимальная серия: {max_streak} {'день' if max_streak == 1 else 'дней' if max_streak < 5 else 'дней'} ⭐",
+                reply_markup=main_keyboard(callback.from_user.id == ADMIN_ID)
             )
             await callback.answer()
             return
@@ -762,7 +769,8 @@ async def button_handler(callback: CallbackQuery, state: FSMContext):
             f"📊 Ваша статистика:\n"
             f"• Текущая серия дней без грызения: {current_streak} {'день' if current_streak == 1 else 'дней' if current_streak < 5 else 'дней'} 🔥\n"
             f"• Максимальная серия: {max_streak} {'день' if max_streak == 1 else 'дней' if max_streak < 5 else 'дней'} ⭐\n\n"
-            f"Вы делаете отличную работу! Каждый день — это победа! 🌟"
+            f"Вы делаете отличную работу! Каждый день — это победа! 🌟",
+            reply_markup=main_keyboard(callback.from_user.id == ADMIN_ID)
         )
         await callback.answer()
     else:
@@ -787,7 +795,8 @@ async def save_callback_text(message: Message, state: FSMContext):
     if not events:
         await message.answer(
             f"🎉 Отлично, {name}! Сегодня нет записанных моментов!\n\n"
-            "Это значит, что Вы справляетесь! Продолжайте в том же духе! 💪✨"
+            "Это значит, что Вы справляетесь! Продолжайте в том же духе! 💪✨",
+            reply_markup=main_keyboard(message.from_user.id == ADMIN_ID)
         )
         return
     await state.update_data(events=events, index=0)
@@ -818,7 +827,8 @@ async def save_checkin_nibbling(message: Message, state: FSMContext):
     await message.answer(
         f"Спасибо, {name}, что поделились! 🙏\n\n"
         "Я сохранил это для вечернего разбора. Вечером мы сможем разобрать, что произошло и почему.\n\n"
-        "Берегите себя! Всё будет хорошо! 💙✨"
+        "Берегите себя! Всё будет хорошо! 💙✨",
+        reply_markup=main_keyboard(message.from_user.id == ADMIN_ID)
     )
     await state.clear()
 
@@ -926,7 +936,8 @@ async def admin_stats(message: Message):
         f"🆕 Новых сегодня: {new_today}\n"
         f"📝 Всего событий: {events_count}\n"
         f"🔥 Активных сегодня: {active_today}",
-        parse_mode="Markdown"
+        parse_mode="Markdown",
+        reply_markup=main_keyboard(is_admin=True)
     )
 
 
