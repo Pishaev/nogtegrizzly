@@ -120,6 +120,7 @@ class GenderState(StatesGroup):
 def main_keyboard(is_admin=False):
     keyboard = [
         [KeyboardButton(text="📌 Записать момент")],
+        [KeyboardButton(text="💳 Подписка")],
         [KeyboardButton(text="⚙️ Настройки")]
     ]
 
@@ -832,6 +833,25 @@ async def keyboard_handler(message: Message, state: FSMContext):
             await send_paywall(message, user, message.from_user.id == ADMIN_ID)
             return
         await pogryz_start(message, state)
+    elif message.text == "💳 Подписка":
+        user = get_user(message.from_user.id)
+        if not user:
+            await message.answer("Напишите /start 🙌")
+            return
+        if has_active_subscription(user):
+            end_str = get_subscription_ends_at(user)
+            try:
+                end_date = date.fromisoformat(end_str)
+                end_fmt = end_date.strftime("%d.%m.%Y")
+            except (ValueError, TypeError):
+                end_fmt = end_str or "—"
+            await message.answer(
+                f"✅ Подписка активна до {end_fmt}.\n\n"
+                "Можете продлить в любой момент:",
+                reply_markup=subscription_keyboard(user)
+            )
+        else:
+            await send_paywall(message, user, message.from_user.id == ADMIN_ID)
     elif message.text == "⚙️ Настройки":
         await message.answer(
             "⚙️ Настройки\n\nВыберите, что хотите настроить:",
