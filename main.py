@@ -19,7 +19,8 @@ from db import (
     get_users_with_review_time_and_tz, get_connection, return_connection,
     set_user_name, set_user_is_female,
     set_subscription_ends_at, set_trial_used, get_user_by_id,
-    create_payment as db_create_payment, get_payment_by_yookassa_id, mark_payment_succeeded
+    create_payment as db_create_payment, get_payment_by_yookassa_id, mark_payment_succeeded,
+    set_payment_telegram_message
 )
 
 moscow_tz = timezone(timedelta(hours=3))
@@ -657,12 +658,13 @@ async def subscription_callback_handler(callback: CallbackQuery, state: FSMConte
             except Exception:
                 pass
             name = get_display_name(user)
-            await callback.message.answer(
+            sent_msg = await callback.message.answer(
                 f"Оплата подписки — {SUBSCRIPTION_PRICE_RUB} ₽/мес\n\n"
                 f"{name}, перейдите по ссылке и оплатите:\n{url}\n\n"
                 "После успешной оплаты подписка продлится автоматически. 💙",
                 reply_markup=main_keyboard(callback.from_user.id == ADMIN_ID)
             )
+            set_payment_telegram_message(pay_id, sent_msg.message_id)
         except Exception as e:
             await callback.answer("Ошибка при создании платежа. Попробуйте позже.", show_alert=True)
             return True
@@ -990,7 +992,7 @@ async def yookassa_webhook(request):
     row = get_payment_by_yookassa_id(payment_id_yookassa)
     if not row:
         return web.Response(status=200, text="OK")
-    our_id, user_id, _, status = row
+    our_id, user_id, _, status, telegram_message_id = row
     if status == "succeeded":
         return web.Response(status=200, text="OK")
     if not YOOKASSA_SHOP_ID or not YOOKASSA_SECRET_KEY:
@@ -1022,6 +1024,11 @@ async def yookassa_webhook(request):
     telegram_id = user_row[1]
     if BOT_FOR_WEBHOOK:
         try:
+            if telegram_message_id:
+                try:
+                    await BOT_FOR_WEBHOOK.delete_message(chat_id=telegram_id, message_id=telegram_message_id)
+                except Exception:
+                    pass
             name = get_display_name(user_row)
             await BOT_FOR_WEBHOOK.send_message(
                 telegram_id,

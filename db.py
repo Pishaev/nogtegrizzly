@@ -162,6 +162,17 @@ def init_db():
         cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_payments_yookassa_id ON payments(yookassa_payment_id);
         """)
+        cursor.execute("""
+            DO $$ 
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns 
+                    WHERE table_name='payments' AND column_name='telegram_message_id'
+                ) THEN
+                    ALTER TABLE payments ADD COLUMN telegram_message_id INTEGER;
+                END IF;
+            END $$;
+        """)
 
         # Create events table
         cursor.execute("""
@@ -407,10 +418,23 @@ def get_payment_by_yookassa_id(yookassa_payment_id):
     try:
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT id, user_id, yookassa_payment_id, status FROM payments WHERE yookassa_payment_id = %s",
+            "SELECT id, user_id, yookassa_payment_id, status, telegram_message_id FROM payments WHERE yookassa_payment_id = %s",
             (yookassa_payment_id,)
         )
         return cursor.fetchone()
+    finally:
+        return_connection(conn)
+
+def set_payment_telegram_message(yookassa_payment_id, message_id):
+    """Сохранить message_id сообщения со ссылкой на оплату (чтобы удалить после успеха)."""
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE payments SET telegram_message_id = %s WHERE yookassa_payment_id = %s",
+            (message_id, yookassa_payment_id)
+        )
+        conn.commit()
     finally:
         return_connection(conn)
 
