@@ -130,14 +130,17 @@ class GenderState(StatesGroup):
 
 
 # --- Основная клавиатура ---
-def main_keyboard(is_admin=False):
-    keyboard = [
-        [KeyboardButton(text="📌 Записать момент")],
-        [KeyboardButton(text="⚙️ Настройки")]
-    ]
-
-    if is_admin:
-        keyboard.append([KeyboardButton(text="📊 Статистика бота")])
+def main_keyboard(is_admin=False, has_subscription=True):
+    """Если нет подписки и не админ — только кнопка «Подписка». Иначе полное меню."""
+    if not is_admin and not has_subscription:
+        keyboard = [[KeyboardButton(text="💳 Подписка")]]
+    else:
+        keyboard = [
+            [KeyboardButton(text="📌 Записать момент")],
+            [KeyboardButton(text="⚙️ Настройки")]
+        ]
+        if is_admin:
+            keyboard.append([KeyboardButton(text="📊 Статистика бота")])
 
     return ReplyKeyboardMarkup(
         keyboard=keyboard,
@@ -261,7 +264,7 @@ async def send_welcome_and_next(reply_target, user, state: FSMContext, is_admin:
             "Напишите время в формате ЧЧ:ММ\n"
             "Например: 21:30",
             parse_mode="Markdown",
-            reply_markup=main_keyboard(is_admin)
+            reply_markup=main_keyboard(is_admin, has_active_subscription(user))
         )
         await state.set_state(TimeState.waiting_time)
     else:
@@ -274,7 +277,7 @@ async def send_welcome_and_next(reply_target, user, state: FSMContext, is_admin:
             f"🌍 Часовой пояс: {tz_name}\n\n"
             f"Всё готово, {name}! Я буду помогать Вам каждый день. 🙌💙",
             parse_mode="Markdown",
-            reply_markup=main_keyboard(is_admin)
+            reply_markup=main_keyboard(is_admin, has_active_subscription(user))
         )
         await state.clear()
 
@@ -318,7 +321,7 @@ async def start(message: Message, state: FSMContext):
             "Напишите время в формате ЧЧ:ММ\n"
             "Например: 21:30",
             parse_mode="Markdown",
-            reply_markup=main_keyboard(message.from_user.id == ADMIN_ID)
+            reply_markup=main_keyboard(message.from_user.id == ADMIN_ID, has_active_subscription(user))
         )
         await state.set_state(TimeState.waiting_time)
     else:
@@ -331,7 +334,7 @@ async def start(message: Message, state: FSMContext):
             f"🌍 Часовой пояс: {tz_name}\n\n"
             f"Всё готово, {name}! Я буду помогать Вам каждый день. 🙌💙",
             parse_mode="Markdown",
-            reply_markup=main_keyboard(message.from_user.id == ADMIN_ID)
+            reply_markup=main_keyboard(message.from_user.id == ADMIN_ID, has_active_subscription(user))
         )
 
 
@@ -384,6 +387,14 @@ def checkin_keyboard(user_id):
 
 # --- /pogryz ---
 async def pogryz_start(message: Message, state: FSMContext):
+    user = get_user(message.from_user.id)
+    if not user:
+        await message.answer("Напишите /start 🙌")
+        return
+    if message.from_user.id != ADMIN_ID and not has_active_subscription(user):
+        await send_paywall(message, user, message.from_user.id == ADMIN_ID)
+        await message.answer(" ", reply_markup=main_keyboard(False, False))
+        return
     await message.answer(
         "Расскажите, что произошло в этот момент: 📝\n\n"
         "Опишите ситуацию, свои чувства и мысли. Это поможет лучше понять причины."
@@ -401,7 +412,7 @@ async def save_pogryz(message: Message, state: FSMContext):
     await message.answer(
         f"✅ Событие записано!\n\n"
         f"Спасибо, {name}, что поделились. Вечером мы сможем разобрать это вместе. 💙",
-        reply_markup=main_keyboard(message.from_user.id == ADMIN_ID)
+        reply_markup=main_keyboard(message.from_user.id == ADMIN_ID, has_active_subscription(user))
     )
     await state.clear()
 
@@ -414,6 +425,7 @@ async def start_review(message: Message, state: FSMContext):
         return
     if message.from_user.id != ADMIN_ID and not has_active_subscription(user):
         await send_paywall(message, user, message.from_user.id == ADMIN_ID)
+        await message.answer(" ", reply_markup=main_keyboard(False, False))
         return
 
     events = get_today_events(user[0])
@@ -422,7 +434,7 @@ async def start_review(message: Message, state: FSMContext):
         await message.answer(
             f"🎉 Отлично, {name}! Сегодня нет записанных моментов!\n\n"
             "Это значит, что Вы справляетесь! Продолжайте в том же духе! 💪✨",
-            reply_markup=main_keyboard(message.from_user.id == ADMIN_ID)
+            reply_markup=main_keyboard(message.from_user.id == ADMIN_ID, has_active_subscription(user))
         )
         return
 
@@ -473,7 +485,7 @@ async def save_review_answer(message: Message, state: FSMContext):
             "Это важный шаг к пониманию себя и своих триггеров. "
             "Каждый разбор делает Вас сильнее! 💪✨\n\n"
             "Продолжайте работать над собой, у Вас всё получается! 🌟",
-            reply_markup=main_keyboard(message.from_user.id == ADMIN_ID)
+            reply_markup=main_keyboard(message.from_user.id == ADMIN_ID, has_active_subscription(user))
         )
         await state.clear()
 
@@ -623,7 +635,7 @@ async def subscription_callback_handler(callback: CallbackQuery, state: FSMConte
             f"У Вас есть {TRIAL_DAYS} дня бесплатного доступа. "
             f"Подписка действует до {end_date.strftime('%d.%m.%Y')}.\n\n"
             "Можете пользоваться всеми функциями бота. 💙",
-            reply_markup=main_keyboard(callback.from_user.id == ADMIN_ID)
+            reply_markup=main_keyboard(callback.from_user.id == ADMIN_ID, has_active_subscription(user))
         )
         await callback.answer()
         return True
@@ -662,7 +674,7 @@ async def subscription_callback_handler(callback: CallbackQuery, state: FSMConte
                 f"Оплата подписки — {SUBSCRIPTION_PRICE_RUB} ₽/мес\n\n"
                 f"{name}, перейдите по ссылке и оплатите:\n{url}\n\n"
                 "После успешной оплаты подписка продлится автоматически. 💙",
-                reply_markup=main_keyboard(callback.from_user.id == ADMIN_ID)
+                reply_markup=main_keyboard(callback.from_user.id == ADMIN_ID, has_active_subscription(user))
             )
             set_payment_telegram_message(pay_id, sent_msg.message_id)
         except Exception as e:
@@ -695,13 +707,13 @@ async def button_handler(callback: CallbackQuery, state: FSMContext):
             name = get_display_name(user)
             await callback.message.answer(
                 f"✅ Часовой пояс установлен: {tz_info['name']} (UTC+{tz_info['offset']}) 🌍\n\n"
-                f"{name}, теперь все напоминания будут приходить по Вашему местному времени!",
-                reply_markup=main_keyboard(callback.from_user.id == ADMIN_ID)
+            f"{name}, теперь все напоминания будут приходить по Вашему местному времени!",
+                reply_markup=main_keyboard(callback.from_user.id == ADMIN_ID, has_active_subscription(user))
             )
             await state.clear()
             await callback.answer()
         return
-    
+
     # Handle check-in buttons (Great! / Just a little nibbling)
     if callback.data.startswith("checkin_great_"):
         user_id = int(callback.data.split("_")[2])
@@ -712,11 +724,11 @@ async def button_handler(callback: CallbackQuery, state: FSMContext):
             f"Это замечательно, {name}! 🎉\n\n"
             f"Вы {praise_word(user).lower()}, продолжайте в том же духе! Вы справляетесь отлично! 💪✨\n\n"
             "Помните: каждый день без грызения — это маленькая победа! 🌟",
-            reply_markup=main_keyboard(callback.from_user.id == ADMIN_ID)
+            reply_markup=main_keyboard(callback.from_user.id == ADMIN_ID, has_active_subscription(user))
         )
         await callback.answer()
         return
-    
+
     if callback.data.startswith("checkin_nibbling_"):
         user_id = int(callback.data.split("_")[2])
         await callback.message.edit_reply_markup(None)
@@ -742,6 +754,7 @@ async def button_handler(callback: CallbackQuery, state: FSMContext):
     if callback.from_user.id != ADMIN_ID and not has_active_subscription(user):
         await callback.message.edit_reply_markup(None)
         await send_paywall(callback.message, user, False)
+        await callback.message.answer(" ", reply_markup=main_keyboard(False, False))
         await callback.answer()
         return
 
@@ -760,7 +773,7 @@ async def button_handler(callback: CallbackQuery, state: FSMContext):
                 f"📊 Ваша статистика без изменений:\n"
                 f"• Текущая серия: {current_streak} {'день' if current_streak == 1 else 'дней' if current_streak < 5 else 'дней'} 🔥\n"
                 f"• Максимальная серия: {max_streak} {'день' if max_streak == 1 else 'дней' if max_streak < 5 else 'дней'} ⭐",
-                reply_markup=main_keyboard(callback.from_user.id == ADMIN_ID)
+                reply_markup=main_keyboard(callback.from_user.id == ADMIN_ID, has_active_subscription(user))
             )
             await callback.answer()
             return
@@ -783,7 +796,7 @@ async def button_handler(callback: CallbackQuery, state: FSMContext):
             f"• Текущая серия дней без грызения: {current_streak} {'день' if current_streak == 1 else 'дней' if current_streak < 5 else 'дней'} 🔥\n"
             f"• Максимальная серия: {max_streak} {'день' if max_streak == 1 else 'дней' if max_streak < 5 else 'дней'} ⭐\n\n"
             f"Вы делаете отличную работу! Каждый день — это победа! 🌟",
-            reply_markup=main_keyboard(callback.from_user.id == ADMIN_ID)
+            reply_markup=main_keyboard(callback.from_user.id == ADMIN_ID, has_active_subscription(user))
         )
         await callback.answer()
     else:
@@ -809,7 +822,7 @@ async def save_callback_text(message: Message, state: FSMContext):
         await message.answer(
             f"🎉 Отлично, {name}! Сегодня нет записанных моментов!\n\n"
             "Это значит, что Вы справляетесь! Продолжайте в том же духе! 💪✨",
-            reply_markup=main_keyboard(message.from_user.id == ADMIN_ID)
+            reply_markup=main_keyboard(message.from_user.id == ADMIN_ID, has_active_subscription(user))
         )
         return
     await state.update_data(events=events, index=0)
@@ -841,7 +854,7 @@ async def save_checkin_nibbling(message: Message, state: FSMContext):
         f"Спасибо, {name}, что поделились! 🙏\n\n"
         "Я сохранил это для вечернего разбора. Вечером мы сможем разобрать, что произошло и почему.\n\n"
         "Берегите себя! Всё будет хорошо! 💙✨",
-        reply_markup=main_keyboard(message.from_user.id == ADMIN_ID)
+        reply_markup=main_keyboard(message.from_user.id == ADMIN_ID, has_active_subscription(user))
     )
     await state.clear()
 
@@ -854,6 +867,7 @@ async def keyboard_handler(message: Message, state: FSMContext):
             return
         if message.from_user.id != ADMIN_ID and not has_active_subscription(user):
             await send_paywall(message, user, message.from_user.id == ADMIN_ID)
+            await message.answer(" ", reply_markup=main_keyboard(False, False))
             return
         await pogryz_start(message, state)
     elif message.text == "💳 Подписка":
@@ -875,15 +889,23 @@ async def keyboard_handler(message: Message, state: FSMContext):
             )
         else:
             await send_paywall(message, user, message.from_user.id == ADMIN_ID)
+            await message.answer(" ", reply_markup=main_keyboard(message.from_user.id == ADMIN_ID, False))
     elif message.text == "⚙️ Настройки":
+        user = get_user(message.from_user.id)
+        if user and message.from_user.id != ADMIN_ID and not has_active_subscription(user):
+            await send_paywall(message, user, False)
+            await message.answer(" ", reply_markup=main_keyboard(False, False))
+            return
         await message.answer(
             "⚙️ Настройки\n\nВыберите, что хотите настроить:",
             reply_markup=settings_keyboard(message.from_user.id == ADMIN_ID)
         )
     elif message.text == "◀️ Назад":
+        user = get_user(message.from_user.id)
+        has_sub = has_active_subscription(user) if user else True
         await message.answer(
             "◀️ Назад",
-            reply_markup=main_keyboard(message.from_user.id == ADMIN_ID)
+            reply_markup=main_keyboard(message.from_user.id == ADMIN_ID, has_sub)
         )
     elif message.text == "⏰ Изменить время вечернего разбора":
         await message.answer(
@@ -963,10 +985,12 @@ async def broadcast_keyboard_on_startup(bot: Bot):
         for user_id, tg_id, _ in users:
             try:
                 is_admin = tg_id == ADMIN_ID
+                user_row = get_user(tg_id)
+                has_sub = has_active_subscription(user_row) if user_row else False
                 await bot.send_message(
                     tg_id,
                     " ",
-                    reply_markup=main_keyboard(is_admin=is_admin)
+                    reply_markup=main_keyboard(is_admin=is_admin, has_subscription=has_sub)
                 )
                 await asyncio.sleep(0.05)  # Небольшая пауза, чтобы не упереться в лимиты
             except Exception:
