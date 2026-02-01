@@ -154,7 +154,7 @@ def init_db():
                 id SERIAL PRIMARY KEY,
                 user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
                 yookassa_payment_id VARCHAR(100) UNIQUE NOT NULL,
-                amount_cents INTEGER NOT NULL,
+                amount_rub INTEGER NOT NULL,
                 status VARCHAR(20) DEFAULT 'pending',
                 created_at VARCHAR(50) NOT NULL
             )
@@ -172,6 +172,20 @@ def init_db():
                     ALTER TABLE payments ADD COLUMN telegram_message_id INTEGER;
                 END IF;
             END $$;
+        """)
+        cursor.execute("""
+            DO $$ 
+            BEGIN
+                IF EXISTS (
+                    SELECT 1 FROM information_schema.columns 
+                    WHERE table_name='payments' AND column_name='amount_cents'
+                ) THEN
+                    ALTER TABLE payments RENAME COLUMN amount_cents TO amount_rub;
+                END IF;
+            END $$;
+        """)
+        cursor.execute("""
+            UPDATE payments SET amount_rub = amount_rub / 100 WHERE amount_rub > 1000
         """)
 
         # Create events table
@@ -400,14 +414,14 @@ def get_user_by_id(user_id):
 
 
 # --- Платежи YooKassa (для вебхука) ---
-def create_payment(user_id, yookassa_payment_id, amount_cents):
+def create_payment(user_id, yookassa_payment_id, amount_rub):
     conn = get_connection()
     try:
         cursor = conn.cursor()
         cursor.execute(
-            """INSERT INTO payments (user_id, yookassa_payment_id, amount_cents, status, created_at)
+            """INSERT INTO payments (user_id, yookassa_payment_id, amount_rub, status, created_at)
                VALUES (%s, %s, %s, 'pending', %s)""",
-            (user_id, yookassa_payment_id, amount_cents, datetime.now().isoformat())
+            (user_id, yookassa_payment_id, amount_rub, datetime.now().isoformat())
         )
         conn.commit()
     finally:

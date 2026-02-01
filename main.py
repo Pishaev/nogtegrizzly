@@ -639,7 +639,7 @@ async def subscription_callback_handler(callback: CallbackQuery, state: FSMConte
             from yookassa import Configuration, Payment
             Configuration.configure(YOOKASSA_SHOP_ID, YOOKASSA_SECRET_KEY)
             amount_rub = str(SUBSCRIPTION_PRICE_RUB)
-            return_url = os.environ.get("YOOKASSA_RETURN_URL", "https://t.me/")
+            return_url = os.environ.get("YOOKASSA_RETURN_URL", "https://t.me/nogtegrizzly_bot")
             payment = Payment.create({
                 "amount": {"value": amount_rub, "currency": "RUB"},
                 "capture": True,  # списать сразу, без ручного подтверждения в личном кабинете
@@ -652,7 +652,7 @@ async def subscription_callback_handler(callback: CallbackQuery, state: FSMConte
             if not url:
                 await callback.answer("Ошибка создания платежа.", show_alert=True)
                 return True
-            db_create_payment(user[0], pay_id, SUBSCRIPTION_PRICE_RUB * 100)
+            db_create_payment(user[0], pay_id, SUBSCRIPTION_PRICE_RUB)
             try:
                 await callback.message.edit_reply_markup(None)
             except Exception:
