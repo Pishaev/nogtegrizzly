@@ -23,8 +23,20 @@ from db import (
 )
 
 moscow_tz = timezone(timedelta(hours=3))
-BOT_TOKEN = os.environ.get("BOT_TOKEN")
-ADMIN_ID = int(os.environ.get("ADMIN_ID"))  # <-- сюда вставь свой telegram id
+
+# --- Переменные окружения (задать в Railway: Variables) ---
+# Обязательные:
+BOT_TOKEN = os.environ.get("BOT_TOKEN")                    # Токен бота от @BotFather
+ADMIN_ID = int(os.environ.get("ADMIN_ID", "0"))            # Ваш Telegram ID (число)
+DATABASE_URL = os.environ.get("DATABASE_URL")               # PostgreSQL (Railway создаёт сам)
+
+# YooKassa (подписка 199 ₽/мес): вставить Shop ID и Секретный ключ из личного кабинета ЮKassa
+YOOKASSA_SHOP_ID = os.environ.get("YOOKASSA_SHOP_ID")      # Идентификатор магазина (shopId)
+YOOKASSA_SECRET_KEY = os.environ.get("YOOKASSA_SECRET_KEY") # Секретный ключ (Secret key)
+
+# Необязательные:
+# YOOKASSA_RETURN_URL — куда вернуть пользователя после оплаты (по умолчанию https://t.me/)
+# Порт для вебхука ЮKassa берётся из PORT (Railway подставляет сам) — ничего указывать не нужно
 
 init_db()
 
@@ -619,14 +631,12 @@ async def subscription_callback_handler(callback: CallbackQuery, state: FSMConte
         if not user:
             await callback.answer("❌ Пользователь не найден")
             return True
-        shop_id = os.environ.get("YOOKASSA_SHOP_ID")
-        secret_key = os.environ.get("YOOKASSA_SECRET_KEY")
-        if not shop_id or not secret_key:
+        if not YOOKASSA_SHOP_ID or not YOOKASSA_SECRET_KEY:
             await callback.answer("Оплата временно недоступна. Напишите в поддержку.", show_alert=True)
             return True
         try:
             from yookassa import Configuration, Payment
-            Configuration.configure(shop_id, secret_key)
+            Configuration.configure(YOOKASSA_SHOP_ID, YOOKASSA_SECRET_KEY)
             amount_rub = str(SUBSCRIPTION_PRICE_RUB)
             return_url = os.environ.get("YOOKASSA_RETURN_URL", "https://t.me/")
             payment = Payment.create({
@@ -982,8 +992,11 @@ async def yookassa_webhook(request):
     our_id, user_id, _, status = row
     if status == "succeeded":
         return web.Response(status=200, text="OK")
+    if not YOOKASSA_SHOP_ID or not YOOKASSA_SECRET_KEY:
+        return web.Response(status=200, text="OK")
     try:
-        from yookassa import Payment
+        from yookassa import Configuration, Payment
+        Configuration.configure(YOOKASSA_SHOP_ID, YOOKASSA_SECRET_KEY)
         pay = Payment.find_one(payment_id_yookassa)
         if not pay or str(getattr(pay, "status", "")) != "succeeded":
             return web.Response(status=200, text="OK")
@@ -1038,7 +1051,9 @@ class DeduplicationMiddleware(BaseMiddleware):
         return await handler(event, data)
 
 
-# --- Webhook-сервер для YooKassa ---
+# --- Webhook-сервер для ЮKassa ---
+# После оплаты ЮKassa шлёт запрос на наш сервер — подписка продлевается автоматически.
+# В личном кабинете ЮKassa: Настройки → HTTP-уведомления → URL: https://ВАШ-ДОМЕН.railway.app/webhook/yookassa
 async def start_webhook_server(port: int):
     app = web.Application()
     app.router.add_post("/webhook/yookassa", yookassa_webhook)
@@ -1056,13 +1071,12 @@ async def main():
     BOT_FOR_WEBHOOK = bot
     dp = Dispatcher(storage=MemoryStorage())
 
-    # Webhook для YooKassa (если задан WEBHOOK_PORT)
-    webhook_port = os.environ.get("WEBHOOK_PORT")
-    if webhook_port:
-        try:
-            asyncio.create_task(start_webhook_server(int(webhook_port)))
-        except Exception:
-            pass
+    # Webhook для ЮKassa: слушаем на PORT (Railway подставляет сам) или 8080 локально
+    port = os.environ.get("PORT") or os.environ.get("WEBHOOK_PORT") or "8080"
+    try:
+        asyncio.create_task(start_webhook_server(int(port)))
+    except Exception:
+        pass
 
     # Сначала ставим защиту от дублей
     dp.update.outer_middleware(DeduplicationMiddleware())
