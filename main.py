@@ -641,6 +641,7 @@ async def subscription_callback_handler(callback: CallbackQuery, state: FSMConte
             return_url = os.environ.get("YOOKASSA_RETURN_URL", "https://t.me/")
             payment = Payment.create({
                 "amount": {"value": amount_rub, "currency": "RUB"},
+                "capture": True,  # списать сразу, без ручного подтверждения в личном кабинете
                 "confirmation": {"type": "redirect", "return_url": return_url},
                 "description": "Подписка на 1 месяц",
                 "metadata": {"user_id": str(user[0])},
