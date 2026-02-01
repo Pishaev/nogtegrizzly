@@ -1095,7 +1095,11 @@ async def start_webhook_server(port: int):
     await runner.setup()
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
-    await asyncio.Future()  # run forever
+    try:
+        while True:
+            await asyncio.sleep(86400)  # 1 день — задача может быть отменена при остановке бота
+    except asyncio.CancelledError:
+        pass
 
 
 # --- main ---
