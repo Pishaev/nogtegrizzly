@@ -209,11 +209,11 @@ def timezone_keyboard():
 def welcome_text_with_name(name):
     return (
         f"Привет, {name}! 👋\n\n"
-        "Я Ваш помощник в борьбе с привычкой грызть ногти. "
-        "Я помогу Вам отслеживать моменты, когда это происходит, "
-        "и разбирать причины вместе с Вами. 💙\n\n"
+        "Я твой помощник в борьбе с привычкой грызть ногти. "
+        "Я помогу тебе отслеживать моменты, когда это происходит, "
+        "и разбирать причины вместе с тобой. 💙\n\n"
         "**Как я работаю:**\n\n"
-        "1️⃣ 📌 Записать момент — если что-то произошло, просто запишите это\n"
+        "1️⃣ 📌 Записать момент — если что-то произошло, просто запиши это\n"
         "2️⃣ 🌙 Вечерний разбор — я буду напоминать вечером для анализа дня\n"
         "3️⃣ ⚙️ Настройки — время напоминаний и часовой пояс\n\n"
         "Вместе мы справимся! 💪✨\n"
@@ -262,8 +262,8 @@ async def send_welcome_and_next(reply_target, user, state: FSMContext, is_admin:
         await reply_target.answer(
             welcome_text +
             "**Начнём настройку:**\n\n"
-            "Давайте установим удобное время для вечернего разбора. "
-            "Напишите время в формате ЧЧ:ММ\n"
+            "Давай установим удобное время для вечернего разбора. "
+            "Напиши время в формате ЧЧ:ММ\n"
             "Например: 21:30",
             parse_mode="Markdown",
             reply_markup=main_keyboard(is_admin, has_active_subscription(user))
@@ -274,10 +274,10 @@ async def send_welcome_and_next(reply_target, user, state: FSMContext, is_admin:
         tz_name = next((tz["name"] for tz in RUSSIAN_TIMEZONES.values() if tz["offset"] == tz_offset), f"UTC+{tz_offset}")
         await reply_target.answer(
             welcome_text +
-            f"**Ваши настройки:**\n"
+            f"**Твои настройки:**\n"
             f"⏰ Время напоминаний: {user[5]}\n"
             f"🌍 Часовой пояс: {tz_name}\n\n"
-            f"Всё готово, {name}! Я буду помогать Вам каждый день. 🙌💙",
+            f"Всё готово, {name}! Я буду помогать тебе каждый день. 🙌💙",
             parse_mode="Markdown",
             reply_markup=main_keyboard(is_admin, has_active_subscription(user))
         )
@@ -297,7 +297,7 @@ async def start(message: Message, state: FSMContext):
     if not name:
         await message.answer(
             "👋 Добро пожаловать!\n\n"
-            "Как Вас зовут? Напишите своё имя — так мне будет удобнее обращаться к Вам.",
+            "Как тебя зовут? Напиши своё имя — так мне будет удобнее обращаться к тебе.",
             reply_markup=ReplyKeyboardMarkup(keyboard=[], resize_keyboard=True)
         )
         await state.set_state(NameState.waiting_name)
@@ -306,7 +306,7 @@ async def start(message: Message, state: FSMContext):
     # --- Если пол не указан — спрашиваем для правильных окончаний ---
     if len(user) > 9 and user[9] is None:
         await message.answer(
-            f"{name}, укажите, пожалуйста, Ваш пол:",
+            f"{name}, укажи, пожалуйста, свой пол:",
             reply_markup=gender_keyboard()
         )
         await state.set_state(GenderState.waiting)
@@ -319,8 +319,8 @@ async def start(message: Message, state: FSMContext):
         await message.answer(
             welcome_text +
             "**Начнём настройку:**\n\n"
-            "Давайте установим удобное время для вечернего разбора. "
-            "Напишите время в формате ЧЧ:ММ\n"
+            "Давай установим удобное время для вечернего разбора. "
+            "Напиши время в формате ЧЧ:ММ\n"
             "Например: 21:30",
             parse_mode="Markdown",
             reply_markup=main_keyboard(message.from_user.id == ADMIN_ID, has_active_subscription(user))
@@ -331,10 +331,10 @@ async def start(message: Message, state: FSMContext):
         tz_name = next((tz["name"] for tz in RUSSIAN_TIMEZONES.values() if tz["offset"] == tz_offset), f"UTC+{tz_offset}")
         await message.answer(
             welcome_text +
-            f"**Ваши настройки:**\n"
+            f"**Твои настройки:**\n"
             f"⏰ Время напоминаний: {user[5]}\n"
             f"🌍 Часовой пояс: {tz_name}\n\n"
-            f"Всё готово, {name}! Я буду помогать Вам каждый день. 🙌💙",
+            f"Всё готово, {name}! Я буду помогать тебе каждый день. 🙌💙",
             parse_mode="Markdown",
             reply_markup=main_keyboard(message.from_user.id == ADMIN_ID, has_active_subscription(user))
         )
@@ -344,11 +344,11 @@ async def start(message: Message, state: FSMContext):
 async def save_name(message: Message, state: FSMContext):
     name = message.text.strip() if message.text else ""
     if not name or len(name) < 2:
-        await message.answer("Напишите, пожалуйста, своё имя (хотя бы 2 буквы).")
+        await message.answer("Напиши, пожалуйста, своё имя (хотя бы 2 буквы).")
         return
     user = get_user(message.from_user.id)
     if not user:
-        await message.answer("Напишите /start 🙌")
+        await message.answer("Напиши /start 🙌")
         await state.clear()
         return
     set_user_name(user[0], name[:100])
@@ -356,7 +356,7 @@ async def save_name(message: Message, state: FSMContext):
     # Если пол ещё не указан — спрашиваем
     if len(user) > 9 and user[9] is None:
         await message.answer(
-            f"{get_display_name(user)}, укажите, пожалуйста, Ваш пол:",
+            f"{get_display_name(user)}, укажи, пожалуйста, свой пол:",
             reply_markup=gender_keyboard()
         )
         await state.set_state(GenderState.waiting)
@@ -391,29 +391,29 @@ def checkin_keyboard(user_id):
 async def pogryz_start(message: Message, state: FSMContext):
     user = get_user(message.from_user.id)
     if not user:
-        await message.answer("Напишите /start 🙌")
+        await message.answer("Напиши /start 🙌")
         return
     if message.from_user.id != ADMIN_ID and not has_active_subscription(user):
         await send_paywall(message, user, message.from_user.id == ADMIN_ID)
         await message.answer("\u200b", reply_markup=main_keyboard(False, False))
         return
     await message.answer(
-        "Расскажите, что произошло в этот момент: 📝\n\n"
-        "Опишите ситуацию, свои чувства и мысли. Это поможет лучше понять причины."
+        "Расскажи, что произошло в этот момент: 📝\n\n"
+        "Опиши ситуацию, свои чувства и мысли. Это поможет лучше понять причины."
     )
     await state.set_state(PogryzState.waiting_text)
 
 async def save_pogryz(message: Message, state: FSMContext):
     user = get_user(message.from_user.id)
     if not user:
-        await message.answer("Напишите /start 🙌")
+        await message.answer("Напиши /start 🙌")
         return
 
     add_event(user[0], message.text)
     name = get_display_name(user)
     await message.answer(
         f"✅ Событие записано!\n\n"
-        f"Спасибо, {name}, что поделились. Вечером мы сможем разобрать это вместе. 💙",
+        f"Спасибо, {name}, что поделил{'ся' if not get_user_is_female(user) else 'ась'}. Вечером мы сможем разобрать это вместе. 💙",
         reply_markup=main_keyboard(message.from_user.id == ADMIN_ID, has_active_subscription(user))
     )
     await state.clear()
@@ -423,7 +423,7 @@ async def save_pogryz(message: Message, state: FSMContext):
 async def start_review(message: Message, state: FSMContext):
     user = get_user(message.from_user.id)
     if not user:
-        await message.answer("Напишите /start 🙌")
+        await message.answer("Напиши /start 🙌")
         return
     if message.from_user.id != ADMIN_ID and not has_active_subscription(user):
         await send_paywall(message, user, message.from_user.id == ADMIN_ID)
@@ -435,7 +435,7 @@ async def start_review(message: Message, state: FSMContext):
     if not events:
         await message.answer(
             f"🎉 Отлично, {name}! Сегодня нет записанных моментов!\n\n"
-            "Это значит, что Вы справляетесь! Продолжайте в том же духе! 💪✨",
+            "Это значит, что ты справляешься! Продолжай в том же духе! 💪✨",
             reply_markup=main_keyboard(message.from_user.id == ADMIN_ID, has_active_subscription(user))
         )
         return
@@ -444,7 +444,7 @@ async def start_review(message: Message, state: FSMContext):
     first_event = events[0]
     event_count = len(events)
     await message.answer(
-        f"Давайте разберём все сегодняшние события 📋\n\n"
+        f"Давай разберём все сегодняшние события 📋\n\n"
         f"Всего событий сегодня: {event_count}\n\n"
         f"**Событие 1 из {event_count}:**\n_{first_event[3]}_\n\n"
         "Что стало причиной? Какие чувства и мысли были в этот момент? 🤔"
@@ -483,10 +483,10 @@ async def save_review_answer(message: Message, state: FSMContext):
 
         name = get_display_name(user)
         await message.answer(
-            f"🎉 Отлично, {name}! Вы разобрали все моменты дня!\n\n"
+            f"🎉 Отлично, {name}! Ты разобрал{'а' if get_user_is_female(user) else ''} все моменты дня!\n\n"
             "Это важный шаг к пониманию себя и своих триггеров. "
-            "Каждый разбор делает Вас сильнее! 💪✨\n\n"
-            "Продолжайте работать над собой, у Вас всё получается! 🌟",
+            "Каждый разбор делает тебя сильнее! 💪✨\n\n"
+            "Продолжай работать над собой, у тебя всё получается! 🌟",
             reply_markup=main_keyboard(message.from_user.id == ADMIN_ID, has_active_subscription(user))
         )
         await state.clear()
@@ -506,7 +506,7 @@ async def save_time(message: Message, state: FSMContext):
 
     user = get_user(message.from_user.id)
     if not user:
-        await message.answer("Напишите /start 🙌")
+        await message.answer("Напиши /start 🙌")
         return
 
     set_review_time(user[0], time_text)
@@ -514,8 +514,8 @@ async def save_time(message: Message, state: FSMContext):
     # Always prompt for timezone selection after setting review time (as per user request)
     # This ensures users set their timezone during initial setup
     await message.answer(
-        f"✅ Отлично, {name}! Буду напоминать Вам каждый день в {time_text} 🕰\n\n"
-        "Теперь выберите свой часовой пояс, чтобы напоминания приходили в правильное время:\n\n"
+        f"✅ Отлично, {name}! Буду напоминать тебе каждый день в {time_text} 🕰\n\n"
+        "Теперь выбери свой часовой пояс, чтобы напоминания приходили в правильное время:\n\n"
         "📍 Рекомендуется Москва (UTC+3)",
         reply_markup=timezone_keyboard()
     )
@@ -546,7 +546,7 @@ async def reminder_loop(bot: Bot):
                     name = get_display_name(user_row) if user_row else "друг"
                     await bot.send_message(
                         tg_id,
-                        f"Привет, {name}! 👋 Как дела? Как Вы себя чувствуете?",
+                        f"Привет, {name}! 👋 Как дела? Как ты себя чувствуешь?",
                         reply_markup=keyboard
                     )
                 except Exception:
@@ -573,8 +573,8 @@ async def reminder_loop(bot: Bot):
                             tg_id,
                             f"🌙 Добрый вечер, {name}! Время вечернего разбора!\n\n"
                             "У Вас есть записанные события за сегодня. "
-                            "Давайте разберём их вместе! 💙\n\n"
-                            "Используйте команду /review"
+                            "Давай разберём их вместе! 💙\n\n"
+                            "Используй команду /review"
                         )
                     else:
                         keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -586,7 +586,7 @@ async def reminder_loop(bot: Bot):
                         await bot.send_message(
                             tg_id,
                             f"🌙 Добрый вечер, {name}!\n\n"
-                            "Как дела? Целостны ли Ваши ногти сейчас? 💅",
+                            "Как дела? Целостны ли твои ногти сейчас? 💅",
                             reply_markup=keyboard
                         )
                 except Exception:
@@ -647,7 +647,7 @@ async def subscription_callback_handler(callback: CallbackQuery, state: FSMConte
             await callback.answer("❌ Пользователь не найден")
             return True
         if not YOOKASSA_SHOP_ID or not YOOKASSA_SECRET_KEY:
-            await callback.answer("Оплата временно недоступна. Напишите в поддержку.", show_alert=True)
+            await callback.answer("Оплата временно недоступна. Напиши в поддержку.", show_alert=True)
             return True
         try:
             from yookassa import Configuration, Payment
@@ -709,7 +709,7 @@ async def button_handler(callback: CallbackQuery, state: FSMContext):
             name = get_display_name(user)
             await callback.message.answer(
                 f"✅ Часовой пояс установлен: {tz_info['name']} (UTC+{tz_info['offset']}) 🌍\n\n"
-            f"{name}, теперь все напоминания будут приходить по Вашему местному времени!",
+            f"{name}, теперь все напоминания будут приходить по твоему местному времени!",
                 reply_markup=main_keyboard(callback.from_user.id == ADMIN_ID, has_active_subscription(user))
             )
             await state.clear()
@@ -724,8 +724,8 @@ async def button_handler(callback: CallbackQuery, state: FSMContext):
         name = get_display_name(user) if user else "друг"
         await callback.message.answer(
             f"Это замечательно, {name}! 🎉\n\n"
-            f"Вы {praise_word(user).lower()}, продолжайте в том же духе! Вы справляетесь отлично! 💪✨\n\n"
-            "Помните: каждый день без грызения — это маленькая победа! 🌟",
+            f"Ты {praise_word(user).lower()}, продолжай в том же духе! Ты справляешься отлично! 💪✨\n\n"
+            "Помни: каждый день без грызения — это маленькая победа! 🌟",
             reply_markup=main_keyboard(callback.from_user.id == ADMIN_ID, has_active_subscription(user))
         )
         await callback.answer()
@@ -734,9 +734,11 @@ async def button_handler(callback: CallbackQuery, state: FSMContext):
     if callback.data.startswith("checkin_nibbling_"):
         user_id = int(callback.data.split("_")[2])
         await callback.message.edit_reply_markup(None)
+        u = get_user(callback.from_user.id)
+        feel = "чувствовала" if (u and get_user_is_female(u)) else "чувствовал"
         await callback.message.answer(
             "Понимаю, такое бывает 😔\n\n"
-            "Расскажите, пожалуйста, что произошло? Что Вы чувствовали в этот момент?"
+            f"Расскажи, пожалуйста, что произошло? Что ты {feel} в этот момент?"
         )
         await state.set_state(CheckinNibblingState.waiting_text)
         await state.update_data(user_id=user_id)
@@ -771,8 +773,8 @@ async def button_handler(callback: CallbackQuery, state: FSMContext):
             current_streak = user[2] or 0
             max_streak = user[3] or 0
             await callback.message.answer(
-                f"👍 Отлично, {name}! Вы уже отметили этот день без грызения.\n\n"
-                f"📊 Ваша статистика без изменений:\n"
+                f"👍 Отлично, {name}! Ты уже отметил{'а' if get_user_is_female(user) else ''} этот день без грызения.\n\n"
+                f"📊 Твоя статистика без изменений:\n"
                 f"• Текущая серия: {current_streak} {'день' if current_streak == 1 else 'дней' if current_streak < 5 else 'дней'} 🔥\n"
                 f"• Максимальная серия: {max_streak} {'день' if max_streak == 1 else 'дней' if max_streak < 5 else 'дней'} ⭐",
                 reply_markup=main_keyboard(callback.from_user.id == ADMIN_ID, has_active_subscription(user))
@@ -793,19 +795,19 @@ async def button_handler(callback: CallbackQuery, state: FSMContext):
             return_connection(conn)
         name = get_display_name(user)
         await callback.message.answer(
-            f"🎉 {praise_word(user)}, {name}! Продолжайте в том же духе! 💪\n\n"
-            f"📊 Ваша статистика:\n"
+            f"🎉 {praise_word(user)}, {name}! Продолжай в том же духе! 💪\n\n"
+            f"📊 Твоя статистика:\n"
             f"• Текущая серия дней без грызения: {current_streak} {'день' if current_streak == 1 else 'дней' if current_streak < 5 else 'дней'} 🔥\n"
             f"• Максимальная серия: {max_streak} {'день' if max_streak == 1 else 'дней' if max_streak < 5 else 'дней'} ⭐\n\n"
-            f"Вы делаете отличную работу! Каждый день — это победа! 🌟",
+            f"Ты делаешь отличную работу! Каждый день — это победа! 🌟",
             reply_markup=main_keyboard(callback.from_user.id == ADMIN_ID, has_active_subscription(user))
         )
         await callback.answer()
     else:
         await callback.message.answer(
             "Понимаю, такое бывает 😔\n\n"
-            "Расскажите, пожалуйста, что произошло и что стало причиной? "
-            "Опишите ситуацию и свои чувства в этот момент."
+            "Расскажи, пожалуйста, что произошло и что стало причиной? "
+            "Опиши ситуацию и свои чувства в этот момент."
         )
         await state.set_state(CallbackState.waiting_text)
         await state.update_data(user_id=user_id)
@@ -823,7 +825,7 @@ async def save_callback_text(message: Message, state: FSMContext):
     if not events:
         await message.answer(
             f"🎉 Отлично, {name}! Сегодня нет записанных моментов!\n\n"
-            "Это значит, что Вы справляетесь! Продолжайте в том же духе! 💪✨",
+            "Это значит, что ты справляешься! Продолжай в том же духе! 💪✨",
             reply_markup=main_keyboard(message.from_user.id == ADMIN_ID, has_active_subscription(user))
         )
         return
@@ -855,7 +857,7 @@ async def save_checkin_nibbling(message: Message, state: FSMContext):
     await message.answer(
         f"Спасибо, {name}, что поделились! 🙏\n\n"
         "Я сохранил это для вечернего разбора. Вечером мы сможем разобрать, что произошло и почему.\n\n"
-        "Берегите себя! Всё будет хорошо! 💙✨",
+        "Береги себя! Всё будет хорошо! 💙✨",
         reply_markup=main_keyboard(message.from_user.id == ADMIN_ID, has_active_subscription(user))
     )
     await state.clear()
@@ -865,7 +867,7 @@ async def keyboard_handler(message: Message, state: FSMContext):
     if message.text == "📌 Записать момент":
         user = get_user(message.from_user.id)
         if not user:
-            await message.answer("Напишите /start 🙌")
+            await message.answer("Напиши /start 🙌")
             return
         if message.from_user.id != ADMIN_ID and not has_active_subscription(user):
             await send_paywall(message, user, message.from_user.id == ADMIN_ID)
@@ -875,7 +877,7 @@ async def keyboard_handler(message: Message, state: FSMContext):
     elif message.text == "💳 Подписка":
         user = get_user(message.from_user.id)
         if not user:
-            await message.answer("Напишите /start 🙌")
+            await message.answer("Напиши /start 🙌")
             return
         if has_active_subscription(user):
             end_str = get_subscription_ends_at(user)
@@ -912,7 +914,7 @@ async def keyboard_handler(message: Message, state: FSMContext):
     elif message.text == "⏰ Изменить время вечернего разбора":
         await message.answer(
             "⏰ Настройка времени вечернего разбора\n\n"
-            "Напишите новое время в формате ЧЧ:ММ\n"
+            "Напиши новое время в формате ЧЧ:ММ\n"
             "Например: 21:30",
             reply_markup=settings_keyboard(message.from_user.id == ADMIN_ID)
         )
@@ -920,11 +922,11 @@ async def keyboard_handler(message: Message, state: FSMContext):
     elif message.text == "🌍 Изменить часовой пояс":
         user = get_user(message.from_user.id)
         if not user:
-            await message.answer("Напишите /start 🙌")
+            await message.answer("Напиши /start 🙌")
             return
         await message.answer(
             "🌍 Настройка часового пояса\n\n"
-            "Выберите свой часовой пояс, чтобы все напоминания приходили в правильное время:\n\n"
+            "Выбери свой часовой пояс, чтобы все напоминания приходили в правильное время:\n\n"
             "📍 Рекомендуется Москва (UTC+3)",
             reply_markup=timezone_keyboard()
         )
