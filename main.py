@@ -627,6 +627,7 @@ async def subscription_callback_handler(callback: CallbackQuery, state: FSMConte
         end_date = date.today() + timedelta(days=TRIAL_DAYS)
         set_subscription_ends_at(user[0], end_date.isoformat())
         set_trial_used(user[0], True)
+        user = get_user(callback.from_user.id)  # перечитать из БД после обновления подписки
         try:
             await callback.message.delete()
         except Exception:
@@ -634,9 +635,9 @@ async def subscription_callback_handler(callback: CallbackQuery, state: FSMConte
         name = get_display_name(user)
         await callback.message.answer(
             f"✅ Пробный период активирован, {name}!\n\n"
-            f"У Вас есть {TRIAL_DAYS} дня бесплатного доступа. "
+            f"У тебя {TRIAL_DAYS} дня бесплатного доступа. "
             f"Подписка действует до {end_date.strftime('%d.%m.%Y')}.\n\n"
-            "Можете пользоваться всеми функциями бота. 💙",
+            "Можешь пользоваться всеми функциями бота. 💙",
             reply_markup=main_keyboard(callback.from_user.id == ADMIN_ID, has_active_subscription(user))
         )
         await callback.answer()
