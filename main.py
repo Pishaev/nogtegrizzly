@@ -49,7 +49,13 @@ YOOKASSA_SECRET_KEY = os.environ.get("YOOKASSA_SECRET_KEY") # Секретный
 # YOOKASSA_RETURN_URL — куда вернуть пользователя после оплаты (по умолчанию https://t.me/)
 # Порт для вебхука ЮKassa берётся из PORT (Railway подставляет сам) — ничего указывать не нужно
 
-init_db()
+# Инициализация БД при старте (с обработкой ошибок)
+try:
+    init_db()
+except Exception as e:
+    # Если не удалось подключиться при старте, попробуем позже при первом обращении
+    print(f"Warning: Could not initialize database at startup: {e}")
+    print("Database will be initialized on first use.")
 
 # Helper function to get timezone offset from user tuple
 # Handles both new schema (timezone_offset at index 6) and old schema (at index 7 if added)
