@@ -1,6 +1,7 @@
 import asyncio
 import re
 import os
+import signal
 from datetime import datetime, timezone, timedelta, date
 from aiohttp import web
 from aiogram import Bot, Dispatcher
@@ -11,6 +12,7 @@ from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from aiogram import BaseMiddleware
+from aiogram.exceptions import TelegramBadRequest
 
 from db import (
     init_db, create_user, get_user, add_event,
@@ -20,7 +22,7 @@ from db import (
     set_user_name, set_user_is_female,
     set_subscription_ends_at, set_trial_used, get_user_by_id,
     create_payment as db_create_payment, get_payment_by_yookassa_id, mark_payment_succeeded,
-    set_payment_telegram_message
+    set_payment_telegram_message, close_pool
 )
 
 moscow_tz = timezone(timedelta(hours=3))
@@ -78,6 +80,18 @@ def get_display_name(user):
 def praise_word(user):
     """«Молодец» или «Умница» в зависимости от пола пользователя."""
     return "Умница" if get_user_is_female(user) else "Молодец"
+
+# --- Безопасный ответ на callback (игнорирует ошибки "query is too old") ---
+async def safe_callback_answer(callback: CallbackQuery, text: str = None, show_alert: bool = False):
+    """Безопасно отвечает на callback, игнорируя ошибки 'query is too old'."""
+    try:
+        await callback.answer(text=text, show_alert=show_alert)
+    except TelegramBadRequest as e:
+        # Игнорируем ошибки "query is too old" - это нормально для старых callback'ов
+        if "query is too old" in str(e).lower() or "query id is invalid" in str(e).lower():
+            pass  # Тихо игнорируем
+        else:
+            raise  # Пробрасываем другие ошибки
 
 # --- Подписка (user tuple: ... index 10 = subscription_ends_at, 11 = trial_used) ---
 def get_subscription_ends_at(user):
@@ -367,7 +381,7 @@ async def save_name(message: Message, state: FSMContext):
 
 # --- Кнопка "Начать" ---
 async def start_button_handler(callback: CallbackQuery, state: FSMContext):
-    await callback.answer()  # убираем "часики"
+    await safe_callback_answer(callback)  # убираем "часики"
     await callback.message.delete()  # удаляем приветственное сообщение с кнопкой
     # Создаём fake Message для передачи в start
     fake_msg = Message(
@@ -602,7 +616,7 @@ async def gender_callback_handler(callback: CallbackQuery, state: FSMContext):
         return False
     user = get_user(callback.from_user.id)
     if not user:
-        await callback.answer("❌ Пользователь не найден")
+        await safe_callback_answer(callback, "❌ Пользователь не найден")
         return True
     set_user_is_female(user[0], callback.data == "gender_yes")
     user = get_user(callback.from_user.id)
@@ -610,7 +624,7 @@ async def gender_callback_handler(callback: CallbackQuery, state: FSMContext):
         await callback.message.edit_reply_markup(None)
     except Exception:
         pass
-    await callback.answer()
+    await safe_callback_answer(callback)
     await send_welcome_and_next(callback.message, user, state, callback.from_user.id == ADMIN_ID)
     return True
 
@@ -619,10 +633,10 @@ async def subscription_callback_handler(callback: CallbackQuery, state: FSMConte
     if callback.data == "sub_trial":
         user = get_user(callback.from_user.id)
         if not user:
-            await callback.answer("❌ Пользователь не найден")
+            await safe_callback_answer(callback, "❌ Пользователь не найден")
             return True
         if get_trial_used(user):
-            await callback.answer("Пробный период уже использован.", show_alert=True)
+            await safe_callback_answer(callback, "Пробный период уже использован.", show_alert=True)
             return True
         end_date = date.today() + timedelta(days=TRIAL_DAYS)
         set_subscription_ends_at(user[0], end_date.isoformat())
@@ -640,15 +654,15 @@ async def subscription_callback_handler(callback: CallbackQuery, state: FSMConte
             "Можешь пользоваться всеми функциями бота. 💙",
             reply_markup=main_keyboard(callback.from_user.id == ADMIN_ID, has_active_subscription(user))
         )
-        await callback.answer()
+        await safe_callback_answer(callback)
         return True
     if callback.data == "sub_pay":
         user = get_user(callback.from_user.id)
         if not user:
-            await callback.answer("❌ Пользователь не найден")
+            await safe_callback_answer(callback, "❌ Пользователь не найден")
             return True
         if not YOOKASSA_SHOP_ID or not YOOKASSA_SECRET_KEY:
-            await callback.answer("Оплата временно недоступна. Напиши в поддержку.", show_alert=True)
+            await safe_callback_answer(callback, "Оплата временно недоступна. Напиши в поддержку.", show_alert=True)
             return True
         try:
             from yookassa import Configuration, Payment
@@ -665,7 +679,7 @@ async def subscription_callback_handler(callback: CallbackQuery, state: FSMConte
             pay_id = payment.id
             url = payment.confirmation.confirmation_url if payment.confirmation else None
             if not url:
-                await callback.answer("Ошибка создания платежа.", show_alert=True)
+                await safe_callback_answer(callback, "Ошибка создания платежа.", show_alert=True)
                 return True
             db_create_payment(user[0], pay_id, SUBSCRIPTION_PRICE_RUB)
             try:
@@ -681,9 +695,9 @@ async def subscription_callback_handler(callback: CallbackQuery, state: FSMConte
             )
             set_payment_telegram_message(pay_id, sent_msg.message_id)
         except Exception as e:
-            await callback.answer("Ошибка при создании платежа. Попробуйте позже.", show_alert=True)
+            await safe_callback_answer(callback, "Ошибка при создании платежа. Попробуйте позже.", show_alert=True)
             return True
-        await callback.answer()
+        await safe_callback_answer(callback)
         return True
     return False
 
@@ -701,7 +715,7 @@ async def button_handler(callback: CallbackQuery, state: FSMContext):
         if tz_key in RUSSIAN_TIMEZONES:
             user = get_user(callback.from_user.id)
             if not user:
-                await callback.answer("❌ Пользователь не найден")
+                await safe_callback_answer(callback, "❌ Пользователь не найден")
                 return
             
             tz_info = RUSSIAN_TIMEZONES[tz_key]
@@ -714,7 +728,7 @@ async def button_handler(callback: CallbackQuery, state: FSMContext):
                 reply_markup=main_keyboard(callback.from_user.id == ADMIN_ID, has_active_subscription(user))
             )
             await state.clear()
-            await callback.answer()
+            await safe_callback_answer(callback)
         return
 
     # Handle check-in buttons (Great! / Just a little nibbling)
@@ -729,7 +743,7 @@ async def button_handler(callback: CallbackQuery, state: FSMContext):
             "Помни: каждый день без грызения — это маленькая победа! 🌟",
             reply_markup=main_keyboard(callback.from_user.id == ADMIN_ID, has_active_subscription(user))
         )
-        await callback.answer()
+        await safe_callback_answer(callback)
         return
 
     if callback.data.startswith("checkin_nibbling_"):
@@ -743,24 +757,24 @@ async def button_handler(callback: CallbackQuery, state: FSMContext):
         )
         await state.set_state(CheckinNibblingState.waiting_text)
         await state.update_data(user_id=user_id)
-        await callback.answer()
+        await safe_callback_answer(callback)
         return
     
     # Handle evening review buttons (Да/Нет)
     if not (callback.data.startswith("yes_") or callback.data.startswith("no_")):
-        await callback.answer("❌ Неизвестная команда")
+        await safe_callback_answer(callback, "❌ Неизвестная команда")
         return
     
     user_id = int(callback.data.split("_")[1])
     user = get_user(callback.from_user.id)
     if not user:
-        await callback.answer("❌ Пользователь не найден")
+        await safe_callback_answer(callback, "❌ Пользователь не найден")
         return
     if callback.from_user.id != ADMIN_ID and not has_active_subscription(user):
         await callback.message.edit_reply_markup(None)
         await send_paywall(callback.message, user, False)
         await callback.message.answer("\u200b", reply_markup=main_keyboard(False, False))
-        await callback.answer()
+        await safe_callback_answer(callback)
         return
 
     await callback.message.edit_reply_markup(None)
@@ -780,7 +794,7 @@ async def button_handler(callback: CallbackQuery, state: FSMContext):
                 f"• Максимальная серия: {max_streak} {'день' if max_streak == 1 else 'дней' if max_streak < 5 else 'дней'} ⭐",
                 reply_markup=main_keyboard(callback.from_user.id == ADMIN_ID, has_active_subscription(user))
             )
-            await callback.answer()
+            await safe_callback_answer(callback)
             return
         current_streak = (user[2] or 0) + 1
         max_streak = max(user[3] or 0, current_streak)
@@ -803,7 +817,7 @@ async def button_handler(callback: CallbackQuery, state: FSMContext):
             f"Ты делаешь отличную работу! Каждый день — это победа! 🌟",
             reply_markup=main_keyboard(callback.from_user.id == ADMIN_ID, has_active_subscription(user))
         )
-        await callback.answer()
+        await safe_callback_answer(callback)
     else:
         await callback.message.answer(
             "Понимаю, такое бывает 😔\n\n"
@@ -812,7 +826,7 @@ async def button_handler(callback: CallbackQuery, state: FSMContext):
         )
         await state.set_state(CallbackState.waiting_text)
         await state.update_data(user_id=user_id)
-        await callback.answer()
+        await safe_callback_answer(callback)
 
 
 async def save_callback_text(message: Message, state: FSMContext):
@@ -1141,8 +1155,21 @@ async def main():
     asyncio.create_task(broadcast_keyboard_on_startup(bot))
 
     asyncio.create_task(reminder_loop(bot))
-    await dp.start_polling(bot)
+    
+    try:
+        await dp.start_polling(bot)
+    finally:
+        # Корректно закрываем пул соединений при остановке
+        close_pool()
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        # Обработка Ctrl+C
+        close_pool()
+    except Exception:
+        # Обработка других исключений
+        close_pool()
+        raise
