@@ -22,8 +22,16 @@ from db import (
     set_user_name, set_user_is_female,
     set_subscription_ends_at, set_trial_used, get_user_by_id,
     create_payment as db_create_payment, get_payment_by_yookassa_id, mark_payment_succeeded,
-    set_payment_telegram_message, close_pool
+    set_payment_telegram_message
 )
+
+# Опциональный импорт close_pool (может отсутствовать в старых версиях db.py)
+try:
+    from db import close_pool
+except ImportError:
+    # Если функция еще не добавлена в db.py, создаем заглушку
+    def close_pool():
+        pass
 
 moscow_tz = timezone(timedelta(hours=3))
 
@@ -1160,7 +1168,10 @@ async def main():
         await dp.start_polling(bot)
     finally:
         # Корректно закрываем пул соединений при остановке
-        close_pool()
+        try:
+            close_pool()
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":
@@ -1168,8 +1179,14 @@ if __name__ == "__main__":
         asyncio.run(main())
     except KeyboardInterrupt:
         # Обработка Ctrl+C
-        close_pool()
+        try:
+            close_pool()
+        except Exception:
+            pass
     except Exception:
         # Обработка других исключений
-        close_pool()
+        try:
+            close_pool()
+        except Exception:
+            pass
         raise
