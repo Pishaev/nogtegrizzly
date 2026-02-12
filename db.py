@@ -15,10 +15,11 @@ from datetime import datetime, date
 
 # Connection pool for better performance
 connection_pool = None
+_db_initialized = False
 
-def get_connection():
+def get_connection(timeout=60):
     """Get a connection from the pool"""
-    global connection_pool
+    global connection_pool, _db_initialized
     
     # Get DATABASE_URL when actually needed
     DATABASE_URL = os.environ.get("DATABASE_URL")
@@ -29,14 +30,36 @@ def get_connection():
             "Please set it in your Railway environment variables."
         )
     
+    # Создаем пул соединений, если еще не создан
     if connection_pool is None:
         # Create connection pool using DATABASE_URL directly
+        # Увеличиваем timeout и добавляем параметры для надежности
         connection_pool = ConnectionPool(
             DATABASE_URL,
             min_size=1,
-            max_size=20
+            max_size=10,  # Уменьшаем max_size для избежания перегрузки
+            timeout=60,  # Timeout для получения соединения (секунды)
+            reconnect_timeout=5,  # Timeout для переподключения
+            max_waiting=10,  # Максимум ожидающих запросов
+            max_idle=300,  # Максимальное время простоя соединения (5 минут)
+            max_lifetime=3600,  # Максимальное время жизни соединения (1 час)
         )
-    return connection_pool.getconn()
+    
+    # Инициализируем БД при первом подключении, если еще не было
+    if not _db_initialized:
+        try:
+            temp_conn = connection_pool.getconn(timeout=30)
+            try:
+                # Выполняем инициализацию
+                _init_db_with_connection(temp_conn)
+                _db_initialized = True
+            finally:
+                return_connection(temp_conn)
+        except Exception:
+            # Если не удалось инициализировать, продолжаем - попробуем позже
+            pass
+    
+    return connection_pool.getconn(timeout=timeout)
 
 def return_connection(conn):
     """Return connection to the pool"""
@@ -62,14 +85,23 @@ def return_connection(conn):
         except Exception:
             pass
 
+def close_pool():
+    """Закрывает пул соединений при остановке приложения."""
+    global connection_pool
+    if connection_pool:
+        try:
+            connection_pool.close()
+        except Exception:
+            pass
+        connection_pool = None
+
 
 # --- Инициализация базы ---
-def init_db():
-    conn = get_connection()
-    try:
-        cursor = conn.cursor()
-        
-        # Create users table
+def _init_db_with_connection(conn):
+    """Внутренняя функция инициализации БД с уже полученным соединением."""
+    cursor = conn.cursor()
+    
+    # Create users table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 id SERIAL PRIMARY KEY,
@@ -147,6 +179,19 @@ def init_db():
                 END IF;
             END $$;
         """)
+        
+        # Add last_checkin_sent_date column to track when check-in notification was sent
+        cursor.execute("""
+            DO $$ 
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns 
+                    WHERE table_name='users' AND column_name='last_checkin_sent_date'
+                ) THEN
+                    ALTER TABLE users ADD COLUMN last_checkin_sent_date VARCHAR(10);
+                END IF;
+            END $$;
+        """)
 
         # Payments table for YooKassa: link payment_id -> user_id (webhook)
         cursor.execute("""
@@ -211,9 +256,7 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_events_user_datetime ON events(user_id, datetime);
         """)
 
-        conn.commit()
-    finally:
-        return_connection(conn)
+    conn.commit()
 
 
 # --- Работа с пользователем ---
@@ -459,6 +502,33 @@ def mark_payment_succeeded(payment_id):
         cursor.execute(
             "UPDATE payments SET status = 'succeeded' WHERE id = %s",
             (payment_id,)
+        )
+        conn.commit()
+    finally:
+        return_connection(conn)
+
+def get_last_checkin_sent_date(user_id):
+    """Получить дату последнего отправленного check-in уведомления (YYYY-MM-DD или None)."""
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT last_checkin_sent_date FROM users WHERE id = %s",
+            (user_id,)
+        )
+        row = cursor.fetchone()
+        return row[0] if row and row[0] else None
+    finally:
+        return_connection(conn)
+
+def set_last_checkin_sent_date(user_id, date_str):
+    """Установить дату последнего отправленного check-in уведомления (YYYY-MM-DD)."""
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE users SET last_checkin_sent_date = %s WHERE id = %s",
+            (date_str, user_id)
         )
         conn.commit()
     finally:
