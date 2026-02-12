@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Мой помощник</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Экран 1: Главный -->
+    <div id="mainScreen" class="screen active">
+        <div class="container">
+            <div class="header">
+                <h1>Привет, <span id="userName">друг</span>! 👋</h1>
+            </div>
+            
+            <div class="stats-card">
+                <div class="stat-item">
+                    <div class="stat-label">Текущая серия</div>
+                    <div class="stat-value" id="currentStreak">0</div>
+                    <div class="stat-unit">дней</div>
+                </div>
+            </div>
+
+            <div class="buttons">
+                <button class="btn btn-primary" id="recordBtn">
+                    📌 Записать момент
+                </button>
+                <button class="btn btn-secondary" id="statsBtn">
+                    📊 Статистика
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Экран 2: Статистика -->
+    <div id="statsScreen" class="screen">
+        <div class="container">
+            <div class="header">
+                <button class="back-btn" id="backBtn">← Назад</button>
+                <h2>Статистика</h2>
+            </div>
+
+            <div class="stats-section">
+                <div class="stat-card">
+                    <div class="stat-label">Дней без грызения</div>
+                    <div class="stat-value-large" id="daysWithout">0</div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-label">Записанных моментов</div>
+                    <div class="stat-value-large" id="eventsCount">0</div>
+                </div>
+            </div>
+
+            <div class="chart-container">
+                <canvas id="streakChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

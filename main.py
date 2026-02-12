@@ -2,11 +2,15 @@ import asyncio
 import re
 import os
 import signal
+import hmac
+import hashlib
+import json
+import urllib.parse
 from datetime import datetime, timezone, timedelta, date
 from aiohttp import web
 from aiogram import Bot, Dispatcher
 from aiogram.filters import Command
-from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, Update
+from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, Update, WebAppInfo
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -169,6 +173,9 @@ class GenderState(StatesGroup):
 
 
 # --- Основная клавиатура ---
+# URL мини-приложения (будет установлен при деплое на Vercel)
+WEBAPP_URL = os.environ.get("WEBAPP_URL", "https://your-app.vercel.app")
+
 def main_keyboard(is_admin=False, has_subscription=True):
     """Если нет подписки и не админ — только кнопка «Подписка». Иначе полное меню."""
     if not is_admin and not has_subscription:
@@ -178,7 +185,9 @@ def main_keyboard(is_admin=False, has_subscription=True):
             [KeyboardButton(text="📌 Записать момент")],
             [KeyboardButton(text="⚙️ Настройки")]
         ]
+        # Кнопка мини-приложения показывается только админу (для тестирования)
         if is_admin:
+            keyboard.insert(1, [KeyboardButton(text="📱 Мини-приложение", web_app=WebAppInfo(url=WEBAPP_URL))])
             keyboard.append([KeyboardButton(text="📊 Статистика бота")])
 
     return ReplyKeyboardMarkup(
@@ -1165,12 +1174,171 @@ class DeduplicationMiddleware(BaseMiddleware):
         return await handler(event, data)
 
 
+# --- Проверка авторизации Telegram Web App ---
+def verify_telegram_webapp_data(init_data: str) -> dict:
+    """Проверяет и парсит initData от Telegram Web App."""
+    try:
+        # Парсим initData
+        parsed_data = urllib.parse.parse_qs(init_data)
+        
+        # Извлекаем hash
+        received_hash = parsed_data.get('hash', [None])[0]
+        if not received_hash:
+            return None
+        
+        # Удаляем hash из данных для проверки
+        data_check_string = []
+        for key in sorted(parsed_data.keys()):
+            if key != 'hash':
+                data_check_string.append(f"{key}={parsed_data[key][0]}")
+        
+        data_check_string = '\n'.join(data_check_string)
+        
+        # Вычисляем секретный ключ
+        secret_key = hmac.new(
+            "WebAppData".encode(),
+            BOT_TOKEN.encode(),
+            hashlib.sha256
+        ).digest()
+        
+        # Вычисляем hash
+        calculated_hash = hmac.new(
+            secret_key,
+            data_check_string.encode(),
+            hashlib.sha256
+        ).hexdigest()
+        
+        # Проверяем hash
+        if calculated_hash != received_hash:
+            return None
+        
+        # Извлекаем user данные
+        user_str = parsed_data.get('user', [None])[0]
+        if not user_str:
+            return None
+        
+        user_data = json.loads(user_str)
+        return user_data
+    except Exception as e:
+        print(f"Ошибка проверки initData: {e}")
+        return None
+
+
+# --- API endpoints для мини-приложения ---
+async def api_user_handler(request):
+    """API endpoint для получения данных пользователя."""
+    try:
+        data = await request.json()
+        init_data = data.get('initData', '')
+        
+        if not init_data:
+            return web.Response(status=401, text=json.dumps({"error": "No initData"}))
+        
+        # Проверяем авторизацию
+        user_data = verify_telegram_webapp_data(init_data)
+        if not user_data:
+            return web.Response(status=401, text=json.dumps({"error": "Invalid auth"}))
+        
+        telegram_id = user_data.get('id')
+        if not telegram_id:
+            return web.Response(status=401, text=json.dumps({"error": "No user ID"}))
+        
+        # Получаем данные пользователя из БД
+        user = get_user(telegram_id)
+        if not user:
+            return web.Response(status=404, text=json.dumps({"error": "User not found"}))
+        
+        # Формируем ответ
+        response_data = {
+            "name": get_user_name(user) or "друг",
+            "current_streak": user[2] or 0,
+            "max_streak": user[3] or 0,
+        }
+        
+        return web.Response(
+            status=200,
+            text=json.dumps(response_data),
+            content_type='application/json'
+        )
+    except Exception as e:
+        print(f"Ошибка API user: {e}")
+        return web.Response(status=500, text=json.dumps({"error": str(e)}))
+
+
+async def api_events_handler(request):
+    """API endpoint для получения событий и данных для графика."""
+    try:
+        data = await request.json()
+        init_data = data.get('initData', '')
+        
+        if not init_data:
+            return web.Response(status=401, text=json.dumps({"error": "No initData"}))
+        
+        # Проверяем авторизацию
+        user_data = verify_telegram_webapp_data(init_data)
+        if not user_data:
+            return web.Response(status=401, text=json.dumps({"error": "Invalid auth"}))
+        
+        telegram_id = user_data.get('id')
+        if not telegram_id:
+            return web.Response(status=401, text=json.dumps({"error": "No user ID"}))
+        
+        # Получаем данные пользователя из БД
+        user = get_user(telegram_id)
+        if not user:
+            return web.Response(status=404, text=json.dumps({"error": "User not found"}))
+        
+        # Получаем все события пользователя
+        conn = get_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT datetime, text FROM events
+                WHERE user_id = %s
+                ORDER BY datetime DESC
+                LIMIT 100
+            """, (user[0],))
+            events = cur.fetchall()
+        finally:
+            return_connection(conn)
+        
+        # Формируем данные для графика (последние 30 дней)
+        chart_data = []
+        today = date.today()
+        for i in range(30):
+            day = today - timedelta(days=29 - i)
+            day_str = day.isoformat()
+            
+            # Подсчитываем события за этот день
+            count = sum(1 for event in events if event[0] and event[0].startswith(day_str))
+            chart_data.append({
+                "date": day_str,
+                "value": count
+            })
+        
+        response_data = {
+            "events": [{"datetime": e[0], "text": e[1]} for e in events],
+            "chartData": chart_data
+        }
+        
+        return web.Response(
+            status=200,
+            text=json.dumps(response_data),
+            content_type='application/json'
+        )
+    except Exception as e:
+        print(f"Ошибка API events: {e}")
+        return web.Response(status=500, text=json.dumps({"error": str(e)}))
+
+
 # --- Webhook-сервер для ЮKassa ---
 # После оплаты ЮKassa шлёт запрос на наш сервер — подписка продлевается автоматически.
 # В личном кабинете ЮKassa: Настройки → HTTP-уведомления → URL: https://ВАШ-ДОМЕН.railway.app/webhook/yookassa
 async def start_webhook_server(port: int):
     app = web.Application()
     app.router.add_post("/webhook/yookassa", yookassa_webhook)
+    app.router.add_post("/api/user", api_user_handler)
+    app.router.add_post("/api/events", api_events_handler)
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, "0.0.0.0", port)
