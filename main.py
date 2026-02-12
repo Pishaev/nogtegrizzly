@@ -564,94 +564,112 @@ async def save_time(message: Message, state: FSMContext):
 # --- Reminder loop ---
 async def reminder_loop(bot: Bot):
     while True:
-        utc_now = datetime.now(timezone.utc)
-        
-        # Get all users with their timezones
-        all_users = get_all_users()
-        today_str = date.today().isoformat()
-        
-        for user_id, tg_id, tz_offset in all_users:
-            if tz_offset is None:
-                continue  # Skip users without timezone set
+        try:
+            utc_now = datetime.now(timezone.utc)
             
-            # Calculate user's local time
-            user_tz = timezone(timedelta(hours=tz_offset))
-            user_local_time = utc_now.astimezone(user_tz)
-            now_str = user_local_time.strftime("%H:%M")
-            current_hour = user_local_time.hour
-            current_minute = user_local_time.minute
+            # Get all users with their timezones
+            try:
+                all_users = get_all_users()
+            except Exception as e:
+                # Если ошибка соединения с БД, ждем и пробуем снова
+                print(f"Database connection error in reminder_loop: {e}")
+                await asyncio.sleep(60)  # Ждем минуту перед следующей попыткой
+                continue
             
-            # 1:00 PM check-in notification (13:00-13:01)
-            # Проверяем диапазон, чтобы не пропустить уведомление
-            if current_hour == 13 and current_minute == 0:
-                # Проверяем, что уведомление еще не было отправлено сегодня
-                last_sent = get_last_checkin_sent_date(user_id)
-                if last_sent == today_str:
-                    continue  # Уже отправлено сегодня
+            today_str = date.today().isoformat()
+            
+            for user_id, tg_id, tz_offset in all_users:
+                if tz_offset is None:
+                    continue  # Skip users without timezone set
                 
-                # Проверяем подписку
-                user_row = get_user(tg_id)
-                if not user_row:
-                    continue
+                # Calculate user's local time
+                user_tz = timezone(timedelta(hours=tz_offset))
+                user_local_time = utc_now.astimezone(user_tz)
+                now_str = user_local_time.strftime("%H:%M")
+                current_hour = user_local_time.hour
+                current_minute = user_local_time.minute
                 
-                # Админы всегда получают уведомления, остальные - только с активной подпиской
-                if tg_id != ADMIN_ID and not has_active_subscription(user_row):
-                    continue
-                
-                keyboard = checkin_keyboard(user_id)
-                try:
-                    name = get_display_name(user_row)
-                    await bot.send_message(
-                        tg_id,
-                        f"Привет, {name}! 👋 Как дела? Как ты себя чувствуешь?",
-                        reply_markup=keyboard
-                    )
-                    # Отмечаем, что уведомление отправлено сегодня
-                    set_last_checkin_sent_date(user_id, today_str)
-                except Exception:
-                    pass  # Skip if user blocked bot or other error
-        
-        # Evening review reminders
-        users = get_users_with_review_time_and_tz()
-        for user_id, tg_id, review_time, tz_offset in users:
-            if tz_offset is None:
-                continue  # Skip users without timezone set
-            
-            # Calculate user's local time
-            user_tz = timezone(timedelta(hours=tz_offset))
-            user_local_time = utc_now.astimezone(user_tz)
-            now_str = user_local_time.strftime("%H:%M")
-            
-            if review_time == now_str:
-                events = get_today_events(user_id)
-                try:
-                    u = get_user(tg_id)
-                    name = get_display_name(u) if u else "друг"
-                    if events:
+                # 1:00 PM check-in notification (13:00-13:01)
+                # Проверяем диапазон, чтобы не пропустить уведомление
+                if current_hour == 13 and current_minute == 0:
+                    # Проверяем, что уведомление еще не было отправлено сегодня
+                    last_sent = get_last_checkin_sent_date(user_id)
+                    if last_sent == today_str:
+                        continue  # Уже отправлено сегодня
+                    
+                    # Проверяем подписку
+                    user_row = get_user(tg_id)
+                    if not user_row:
+                        continue
+                    
+                    # Админы всегда получают уведомления, остальные - только с активной подпиской
+                    if tg_id != ADMIN_ID and not has_active_subscription(user_row):
+                        continue
+                    
+                    keyboard = checkin_keyboard(user_id)
+                    try:
+                        name = get_display_name(user_row)
                         await bot.send_message(
                             tg_id,
-                            f"🌙 Добрый вечер, {name}! Время вечернего разбора!\n\n"
-                            "У Вас есть записанные события за сегодня. "
-                            "Давай разберём их вместе! 💙\n\n"
-                            "Используй команду /review"
-                        )
-                    else:
-                        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                            [
-                                InlineKeyboardButton(text="✅ Да, целы", callback_data=f"yes_{user_id}"),
-                                InlineKeyboardButton(text="❌ Нет, погрыз", callback_data=f"no_{user_id}")
-                            ]
-                        ])
-                        await bot.send_message(
-                            tg_id,
-                            f"🌙 Добрый вечер, {name}!\n\n"
-                            "Как дела? Целостны ли твои ногти сейчас? 💅",
+                            f"Привет, {name}! 👋 Как дела? Как ты себя чувствуешь?",
                             reply_markup=keyboard
                         )
-                except Exception:
-                    pass  # Skip if user blocked bot or other error
-        
-        await asyncio.sleep(60)
+                        # Отмечаем, что уведомление отправлено сегодня
+                        set_last_checkin_sent_date(user_id, today_str)
+                    except Exception:
+                        pass  # Skip if user blocked bot or other error
+            
+            # Evening review reminders
+            try:
+                users = get_users_with_review_time_and_tz()
+            except Exception as e:
+                # Если ошибка соединения с БД, пропускаем вечерние напоминания в этой итерации
+                print(f"Database connection error getting review users: {e}")
+                users = []
+            
+            for user_id, tg_id, review_time, tz_offset in users:
+                if tz_offset is None:
+                    continue  # Skip users without timezone set
+                
+                # Calculate user's local time
+                user_tz = timezone(timedelta(hours=tz_offset))
+                user_local_time = utc_now.astimezone(user_tz)
+                now_str = user_local_time.strftime("%H:%M")
+                
+                if review_time == now_str:
+                    events = get_today_events(user_id)
+                    try:
+                        u = get_user(tg_id)
+                        name = get_display_name(u) if u else "друг"
+                        if events:
+                            await bot.send_message(
+                                tg_id,
+                                f"🌙 Добрый вечер, {name}! Время вечернего разбора!\n\n"
+                                "У Вас есть записанные события за сегодня. "
+                                "Давай разберём их вместе! 💙\n\n"
+                                "Используй команду /review"
+                            )
+                        else:
+                            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                                [
+                                    InlineKeyboardButton(text="✅ Да, целы", callback_data=f"yes_{user_id}"),
+                                    InlineKeyboardButton(text="❌ Нет, погрыз", callback_data=f"no_{user_id}")
+                                ]
+                            ])
+                            await bot.send_message(
+                                tg_id,
+                                f"🌙 Добрый вечер, {name}!\n\n"
+                                "Как дела? Целостны ли твои ногти сейчас? 💅",
+                                reply_markup=keyboard
+                            )
+                    except Exception:
+                        pass  # Skip if user blocked bot or other error
+            
+            await asyncio.sleep(60)
+        except Exception as e:
+            # Обработка любых других неожиданных ошибок
+            print(f"Unexpected error in reminder_loop: {e}")
+            await asyncio.sleep(60)  # Ждем минуту перед следующей попыткой
 
 
 

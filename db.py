@@ -63,25 +63,38 @@ def get_connection(timeout=60):
 
 def return_connection(conn):
     """Return connection to the pool"""
+    if conn is None:
+        return
+    
     # Ensure transaction is properly closed before returning
     try:
+        # Проверяем, что соединение еще открыто
+        if conn.closed:
+            return  # Соединение уже закрыто, не возвращаем в пул
+        
         # Rollback any open transaction to clean state
         if conn.info.transaction_status != 0:  # Not IDLE
             conn.rollback()
     except Exception:
-        # If we can't rollback, the connection might be bad
+        # If we can't rollback or check status, the connection might be bad (SSL error, etc.)
         # Try to close it instead of returning to pool
         try:
-            conn.close()
-            return  # Don't return bad connection to pool
+            if not conn.closed:
+                conn.close()
         except Exception:
             pass
+        return  # Don't return bad connection to pool
+    
     try:
+        # Проверяем еще раз перед возвратом в пул
+        if conn.closed:
+            return
         connection_pool.putconn(conn)
     except Exception:
-        # If we can't return to pool, close the connection
+        # If we can't return to pool (e.g., SSL error), close the connection
         try:
-            conn.close()
+            if not conn.closed:
+                conn.close()
         except Exception:
             pass
 
