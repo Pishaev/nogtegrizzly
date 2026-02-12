@@ -1227,16 +1227,19 @@ def verify_telegram_webapp_data(init_data: str) -> dict:
 # --- API endpoints для мини-приложения ---
 async def api_user_handler(request):
     """API endpoint для получения данных пользователя."""
+    print("API /api/user запрос получен")
     try:
         data = await request.json()
         init_data = data.get('initData', '')
         
         if not init_data:
+            print("API /api/user: нет initData")
             return web.Response(status=401, text=json.dumps({"error": "No initData"}))
         
         # Проверяем авторизацию
         user_data = verify_telegram_webapp_data(init_data)
         if not user_data:
+            print("API /api/user: неверный initData")
             return web.Response(status=401, text=json.dumps({"error": "Invalid auth"}))
         
         telegram_id = user_data.get('id')
@@ -1246,6 +1249,7 @@ async def api_user_handler(request):
         # Получаем данные пользователя из БД
         user = get_user(telegram_id)
         if not user:
+            print(f"API /api/user: пользователь не найден telegram_id={telegram_id}")
             return web.Response(status=404, text=json.dumps({"error": "User not found"}))
         
         # Формируем ответ
@@ -1255,6 +1259,7 @@ async def api_user_handler(request):
             "max_streak": user[3] or 0,
         }
         
+        print(f"API /api/user: OK telegram_id={telegram_id}")
         return web.Response(
             status=200,
             text=json.dumps(response_data),
@@ -1331,11 +1336,29 @@ async def api_events_handler(request):
         return web.Response(status=500, text=json.dumps({"error": str(e)}))
 
 
+# --- CORS для мини-приложения (запросы с Vercel на Railway) ---
+@web.middleware
+async def cors_middleware(request, handler):
+    if request.method == "OPTIONS":
+        return web.Response(
+            status=200,
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type",
+                "Access-Control-Max-Age": "86400",
+            },
+        )
+    response = await handler(request)
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    return response
+
+
 # --- Webhook-сервер для ЮKassa ---
 # После оплаты ЮKassa шлёт запрос на наш сервер — подписка продлевается автоматически.
 # В личном кабинете ЮKassa: Настройки → HTTP-уведомления → URL: https://ВАШ-ДОМЕН.railway.app/webhook/yookassa
 async def start_webhook_server(port: int):
-    app = web.Application()
+    app = web.Application(middlewares=[cors_middleware])
     app.router.add_post("/webhook/yookassa", yookassa_webhook)
     app.router.add_post("/api/user", api_user_handler)
     app.router.add_post("/api/events", api_events_handler)
