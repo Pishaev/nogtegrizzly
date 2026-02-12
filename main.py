@@ -185,9 +185,9 @@ def main_keyboard(is_admin=False, has_subscription=True):
             [KeyboardButton(text="📌 Записать момент")],
             [KeyboardButton(text="⚙️ Настройки")]
         ]
-        # Кнопка мини-приложения показывается только админу (для тестирования)
+        # Мини-приложение только для админа; открываем через inline-кнопку, иначе initData пустой
         if is_admin:
-            keyboard.insert(1, [KeyboardButton(text="📱 Мини-приложение", web_app=WebAppInfo(url=WEBAPP_URL))])
+            keyboard.insert(1, [KeyboardButton(text="📱 Мини-приложение")])
             keyboard.append([KeyboardButton(text="📊 Статистика бота")])
 
     return ReplyKeyboardMarkup(
@@ -1018,6 +1018,16 @@ async def keyboard_handler(message: Message, state: FSMContext):
             reply_markup=timezone_keyboard()
         )
         await state.set_state(TimezoneState.waiting_selection)
+    elif message.text == "📱 Мини-приложение":
+        if message.from_user.id != ADMIN_ID:
+            return
+        # Открытие через inline-кнопку передаёт initData; reply-кнопка (web_app) — нет
+        await message.answer(
+            "Нажмите кнопку ниже, чтобы открыть приложение:",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="📱 Открыть приложение", web_app=WebAppInfo(url=WEBAPP_URL))]
+            ])
+        )
     elif message.text == "📊 Статистика бота":
         await admin_stats(message)
 
