@@ -3,9 +3,9 @@ const tg = window.Telegram.WebApp;
 tg.ready();
 tg.expand();
 
-// API URL - указываем URL вашего бота на Railway
-// Замените на ваш реальный URL после деплоя
-const API_URL = 'https://your-bot.railway.app';
+// Запросы идут на тот же домен (Vercel), прокси перенаправляет на бота — так нет CORS
+const API_URL = '';
+
 
 // Состояние приложения
 let userData = null;
