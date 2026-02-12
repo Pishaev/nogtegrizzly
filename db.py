@@ -258,6 +258,30 @@ def _init_db_with_connection(conn):
 
     conn.commit()
 
+def init_db():
+    """Инициализация базы данных с повторными попытками при ошибках."""
+    global _db_initialized
+    max_retries = 3
+    retry_delay = 2  # секунды
+    
+    for attempt in range(max_retries):
+        try:
+            conn = get_connection(timeout=30)  # Уменьшаем timeout для init_db
+            try:
+                _init_db_with_connection(conn)
+                _db_initialized = True
+                return
+            finally:
+                return_connection(conn)
+        except Exception as e:
+            if attempt == max_retries - 1:
+                # Последняя попытка - пробрасываем ошибку
+                raise
+            # Ждем перед следующей попыткой
+            import time
+            time.sleep(retry_delay)
+            continue
+
 
 # --- Работа с пользователем ---
 def get_user(tg_id):
