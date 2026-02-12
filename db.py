@@ -17,86 +17,106 @@ from datetime import datetime, date
 connection_pool = None
 _db_initialized = False
 
-def get_connection(timeout=60):
-    """Get a connection from the pool"""
+
+def _reset_pool_on_connection_error():
+    """Закрывает пул при ошибке соединения (SSL/EOF), чтобы следующие запросы создали новые соединения."""
+    global connection_pool
+    if connection_pool is not None:
+        try:
+            connection_pool.close()
+        except Exception:
+            pass
+        connection_pool = None
+
+
+def get_connection(timeout=60, _retry_after_fail=False):
+    """Get a connection from the pool. _retry_after_fail — только для внутренней повторной попытки."""
     global connection_pool, _db_initialized
     
-    # Get DATABASE_URL when actually needed
     DATABASE_URL = os.environ.get("DATABASE_URL")
-    
     if not DATABASE_URL:
         raise ValueError(
             "DATABASE_URL environment variable is not set. "
             "Please set it in your Railway environment variables."
         )
     
-    # Создаем пул соединений, если еще не создан
     if connection_pool is None:
-        # Create connection pool using DATABASE_URL directly
-        # Увеличиваем timeout и добавляем параметры для надежности
         connection_pool = ConnectionPool(
             DATABASE_URL,
             min_size=1,
-            max_size=10,  # Уменьшаем max_size для избежания перегрузки
-            timeout=60,  # Timeout для получения соединения (секунды)
-            reconnect_timeout=5,  # Timeout для переподключения
-            max_waiting=10,  # Максимум ожидающих запросов
-            max_idle=300,  # Максимальное время простоя соединения (5 минут)
-            max_lifetime=3600,  # Максимальное время жизни соединения (1 час)
+            max_size=10,
+            timeout=60,
+            reconnect_timeout=5,
+            max_waiting=10,
+            max_idle=120,   # 2 мин — меньше шанс получить «мёртвое» соединение (SSL EOF)
+            max_lifetime=600,  # 10 мин
         )
     
-    # Инициализируем БД при первом подключении, если еще не было
     if not _db_initialized:
         try:
             temp_conn = connection_pool.getconn(timeout=30)
             try:
-                # Выполняем инициализацию
                 _init_db_with_connection(temp_conn)
                 _db_initialized = True
             finally:
                 return_connection(temp_conn)
         except Exception:
-            # Если не удалось инициализировать, продолжаем - попробуем позже
             pass
     
-    return connection_pool.getconn(timeout=timeout)
+    return _get_connection_checked(timeout, allow_retry=not _retry_after_fail)
 
-def return_connection(conn):
-    """Return connection to the pool"""
-    if conn is None:
-        return
-    
-    # Ensure transaction is properly closed before returning
+
+def _get_connection_checked(timeout, allow_retry=True):
+    """Проверка соединения (SELECT 1). При сбое — одна повторная попытка через новый пул."""
+    conn = connection_pool.getconn(timeout=timeout)
     try:
-        # Проверяем, что соединение еще открыто
-        if conn.closed:
-            return  # Соединение уже закрыто, не возвращаем в пул
-        
-        # Rollback any open transaction to clean state
-        if conn.info.transaction_status != 0:  # Not IDLE
-            conn.rollback()
+        cur = conn.cursor()
+        cur.execute("SELECT 1")
+        cur.close()
+        return conn
     except Exception:
-        # If we can't rollback or check status, the connection might be bad (SSL error, etc.)
-        # Try to close it instead of returning to pool
         try:
             if not conn.closed:
                 conn.close()
         except Exception:
             pass
-        return  # Don't return bad connection to pool
+        _reset_pool_on_connection_error()
+        if allow_retry:
+            return get_connection(timeout=timeout, _retry_after_fail=True)
+        raise
+
+
+def return_connection(conn):
+    """Return connection to the pool. При ошибке (SSL/EOF) закрывает соединение и сбрасывает пул."""
+    if conn is None:
+        return
     
     try:
-        # Проверяем еще раз перед возвратом в пул
+        if conn.closed:
+            return
+        if conn.info.transaction_status != 0:
+            conn.rollback()
+    except Exception:
+        # Соединение битое (SSL error, unexpected eof) — закрываем и сбрасываем весь пул
+        try:
+            if not conn.closed:
+                conn.close()
+        except Exception:
+            pass
+        _reset_pool_on_connection_error()
+        return
+    
+    try:
         if conn.closed:
             return
         connection_pool.putconn(conn)
     except Exception:
-        # If we can't return to pool (e.g., SSL error), close the connection
         try:
             if not conn.closed:
                 conn.close()
         except Exception:
             pass
+        _reset_pool_on_connection_error()
 
 def close_pool():
     """Закрывает пул соединений при остановке приложения."""
