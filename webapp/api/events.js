@@ -1,13 +1,14 @@
-// Прокси к API бота на Railway.
+// Прокси к API бота на Railway. CommonJS для Vercel без конвертации.
 const BOT_API_URL = process.env.BOT_API_URL || 'https://nogtegrizzly-production.up.railway.app';
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   if (req.method !== 'POST') {
     res.setHeader('Access-Control-Allow-Origin', '*');
     return res.status(405).json({ error: 'Method not allowed' });
   }
   try {
-    const { initData } = req.body || {};
+    const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
+    const initData = body.initData;
     if (!initData) {
       res.setHeader('Access-Control-Allow-Origin', '*');
       return res.status(401).json({ error: 'No initData' });
@@ -22,6 +23,6 @@ export default async function handler(req, res) {
     res.status(response.status).setHeader('Content-Type', 'application/json').send(text);
   } catch (e) {
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.status(500).json({ error: String(e.message || e) });
+    res.status(500).json({ error: String(e && (e.message || e)) });
   }
-}
+};
