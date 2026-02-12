@@ -131,12 +131,6 @@ function updateStatsScreen() {
 
 // Настройка обработчиков событий
 function setupEventHandlers() {
-    // Кнопка "Записать момент"
-    document.getElementById('recordBtn').addEventListener('click', () => {
-        // Открываем бота с командой для записи момента
-        tg.openTelegramLink(`https://t.me/nogtegrizzly_bot?start=record`);
-    });
-    
     // Кнопка "Статистика"
     document.getElementById('statsBtn').addEventListener('click', () => {
         showStatsScreen();

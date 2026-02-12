@@ -10,7 +10,7 @@ from datetime import datetime, timezone, timedelta, date
 from aiohttp import web
 from aiogram import Bot, Dispatcher
 from aiogram.filters import Command
-from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, Update, WebAppInfo
+from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, Update
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -173,9 +173,6 @@ class GenderState(StatesGroup):
 
 
 # --- Основная клавиатура ---
-# URL мини-приложения (будет установлен при деплое на Vercel)
-WEBAPP_URL = os.environ.get("WEBAPP_URL", "https://your-app.vercel.app")
-
 def main_keyboard(is_admin=False, has_subscription=True):
     """Если нет подписки и не админ — только кнопка «Подписка». Иначе полное меню."""
     if not is_admin and not has_subscription:
@@ -185,9 +182,7 @@ def main_keyboard(is_admin=False, has_subscription=True):
             [KeyboardButton(text="📌 Записать момент")],
             [KeyboardButton(text="⚙️ Настройки")]
         ]
-        # Мини-приложение только для админа; открываем через inline-кнопку, иначе initData пустой
         if is_admin:
-            keyboard.insert(1, [KeyboardButton(text="📱 Мини-приложение")])
             keyboard.append([KeyboardButton(text="📊 Статистика бота")])
 
     return ReplyKeyboardMarkup(
@@ -1018,16 +1013,6 @@ async def keyboard_handler(message: Message, state: FSMContext):
             reply_markup=timezone_keyboard()
         )
         await state.set_state(TimezoneState.waiting_selection)
-    elif message.text == "📱 Мини-приложение":
-        if message.from_user.id != ADMIN_ID:
-            return
-        # Открытие через inline-кнопку передаёт initData; reply-кнопка (web_app) — нет
-        await message.answer(
-            "Нажмите кнопку ниже, чтобы открыть приложение:",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="📱 Открыть приложение", web_app=WebAppInfo(url=WEBAPP_URL))]
-            ])
-        )
     elif message.text == "📊 Статистика бота":
         await admin_stats(message)
 
