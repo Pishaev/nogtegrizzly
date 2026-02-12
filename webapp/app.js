@@ -40,10 +40,12 @@ async function loadUserData() {
         const initData = tg.initData;
         
         if (!initData) {
+            tg.showAlert('Ошибка: initData не доступен. Откройте мини-приложение кнопкой в боте.');
             throw new Error('initData не доступен');
         }
         
-        const response = await fetch(`${API_URL}/api/user`, {
+        const url = (API_URL || window.location.origin) + '/api/user';
+        const response = await fetch(url, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -53,15 +55,24 @@ async function loadUserData() {
             })
         });
         
+        const errorText = await response.text();
         if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`Ошибка загрузки данных: ${errorText}`);
+            let msg = errorText || `Код ${response.status}`;
+            try {
+                const j = JSON.parse(errorText);
+                if (j && j.error) msg = j.error;
+            } catch (_) {}
+            tg.showAlert('Ошибка загрузки: ' + msg);
+            throw new Error(msg);
         }
         
-        userData = await response.json();
+        userData = JSON.parse(errorText || '{}');
     } catch (error) {
         console.error('Ошибка загрузки данных пользователя:', error);
-        tg.showAlert('Ошибка загрузки данных. Проверьте подключение к интернету.');
+        const msg = (error && error.message) ? error.message : String(error);
+        if (!msg.includes('Ошибка загрузки:')) {
+            tg.showAlert('Ошибка: ' + msg);
+        }
         throw error;
     }
 }
