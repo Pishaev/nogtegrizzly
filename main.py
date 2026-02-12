@@ -22,7 +22,7 @@ from db import (
     set_user_name, set_user_is_female,
     set_subscription_ends_at, set_trial_used, get_user_by_id,
     create_payment as db_create_payment, get_payment_by_yookassa_id, mark_payment_succeeded,
-    set_payment_telegram_message
+    set_payment_telegram_message, get_last_checkin_sent_date, set_last_checkin_sent_date
 )
 
 # Опциональный импорт close_pool (может отсутствовать в старых версиях db.py)
@@ -557,6 +557,8 @@ async def reminder_loop(bot: Bot):
         
         # Get all users with their timezones
         all_users = get_all_users()
+        today_str = date.today().isoformat()
+        
         for user_id, tg_id, tz_offset in all_users:
             if tz_offset is None:
                 continue  # Skip users without timezone set
@@ -565,18 +567,36 @@ async def reminder_loop(bot: Bot):
             user_tz = timezone(timedelta(hours=tz_offset))
             user_local_time = utc_now.astimezone(user_tz)
             now_str = user_local_time.strftime("%H:%M")
+            current_hour = user_local_time.hour
+            current_minute = user_local_time.minute
             
-            # 1:00 PM check-in notification
-            if now_str == "13:00":
+            # 1:00 PM check-in notification (13:00-13:01)
+            # Проверяем диапазон, чтобы не пропустить уведомление
+            if current_hour == 13 and current_minute == 0:
+                # Проверяем, что уведомление еще не было отправлено сегодня
+                last_sent = get_last_checkin_sent_date(user_id)
+                if last_sent == today_str:
+                    continue  # Уже отправлено сегодня
+                
+                # Проверяем подписку
+                user_row = get_user(tg_id)
+                if not user_row:
+                    continue
+                
+                # Админы всегда получают уведомления, остальные - только с активной подпиской
+                if tg_id != ADMIN_ID and not has_active_subscription(user_row):
+                    continue
+                
                 keyboard = checkin_keyboard(user_id)
                 try:
-                    user_row = get_user(tg_id)
-                    name = get_display_name(user_row) if user_row else "друг"
+                    name = get_display_name(user_row)
                     await bot.send_message(
                         tg_id,
                         f"Привет, {name}! 👋 Как дела? Как ты себя чувствуешь?",
                         reply_markup=keyboard
                     )
+                    # Отмечаем, что уведомление отправлено сегодня
+                    set_last_checkin_sent_date(user_id, today_str)
                 except Exception:
                     pass  # Skip if user blocked bot or other error
         
