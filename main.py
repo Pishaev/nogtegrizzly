@@ -22,7 +22,7 @@ from db import (
     set_user_name, set_user_is_female,
     set_subscription_ends_at, set_trial_used, get_user_by_id,
     create_payment as db_create_payment, get_payment_by_yookassa_id, mark_payment_succeeded,
-    set_payment_telegram_message, get_last_checkin_sent_date, set_last_checkin_sent_date
+    set_payment_telegram_message
 )
 
 # Опциональный импорт close_pool (может отсутствовать в старых версиях db.py)
@@ -31,6 +31,17 @@ try:
 except ImportError:
     # Если функция еще не добавлена в db.py, создаем заглушку
     def close_pool():
+        pass
+
+# Опциональный импорт функций для отслеживания check-in уведомлений
+try:
+    from db import get_last_checkin_sent_date, set_last_checkin_sent_date
+except ImportError:
+    # Если функции еще не добавлены в db.py, создаем заглушки
+    def get_last_checkin_sent_date(user_id):
+        return None
+    
+    def set_last_checkin_sent_date(user_id, date_str):
         pass
 
 moscow_tz = timezone(timedelta(hours=3))
