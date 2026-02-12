@@ -102,22 +102,22 @@ def _init_db_with_connection(conn):
     cursor = conn.cursor()
     
     # Create users table
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS users (
-                id SERIAL PRIMARY KEY,
-                telegram_id BIGINT UNIQUE NOT NULL,
-                current_streak INTEGER DEFAULT 0,
-                max_streak INTEGER DEFAULT 0,
-                last_clean_day VARCHAR(10),
-                review_time VARCHAR(5),
-                timezone_offset INTEGER DEFAULT 3,
-                created_at VARCHAR(50),
-                name VARCHAR(100)
-            )
-        """)
-        
-        # Add timezone_offset column if it doesn't exist (for existing databases)
-        cursor.execute("""
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id SERIAL PRIMARY KEY,
+            telegram_id BIGINT UNIQUE NOT NULL,
+            current_streak INTEGER DEFAULT 0,
+            max_streak INTEGER DEFAULT 0,
+            last_clean_day VARCHAR(10),
+            review_time VARCHAR(5),
+            timezone_offset INTEGER DEFAULT 3,
+            created_at VARCHAR(50),
+            name VARCHAR(100)
+        )
+    """)
+    
+    # Add timezone_offset column if it doesn't exist (for existing databases)
+    cursor.execute("""
             DO $$ 
             BEGIN
                 IF NOT EXISTS (
@@ -128,133 +128,133 @@ def _init_db_with_connection(conn):
                     UPDATE users SET timezone_offset = 3 WHERE timezone_offset IS NULL;
                 END IF;
             END $$;
-        """)
+    """)
 
-        # Add name column if it doesn't exist (for existing databases)
-        cursor.execute("""
-            DO $$ 
-            BEGIN
-                IF NOT EXISTS (
-                    SELECT 1 FROM information_schema.columns 
-                    WHERE table_name='users' AND column_name='name'
-                ) THEN
-                    ALTER TABLE users ADD COLUMN name VARCHAR(100);
-                END IF;
-            END $$;
-        """)
+    # Add name column if it doesn't exist (for existing databases)
+    cursor.execute("""
+        DO $$ 
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns 
+                WHERE table_name='users' AND column_name='name'
+            ) THEN
+                ALTER TABLE users ADD COLUMN name VARCHAR(100);
+            END IF;
+        END $$;
+    """)
 
-        # Add is_female column if it doesn't exist (for feminine endings in messages)
-        cursor.execute("""
-            DO $$ 
-            BEGIN
-                IF NOT EXISTS (
-                    SELECT 1 FROM information_schema.columns 
-                    WHERE table_name='users' AND column_name='is_female'
-                ) THEN
-                    ALTER TABLE users ADD COLUMN is_female BOOLEAN;
-                END IF;
-            END $$;
-        """)
+    # Add is_female column if it doesn't exist (for feminine endings in messages)
+    cursor.execute("""
+        DO $$ 
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns 
+                WHERE table_name='users' AND column_name='is_female'
+            ) THEN
+                ALTER TABLE users ADD COLUMN is_female BOOLEAN;
+            END IF;
+        END $$;
+    """)
 
-        # Subscription: end date (inclusive), trial used once
-        cursor.execute("""
-            DO $$ 
-            BEGIN
-                IF NOT EXISTS (
-                    SELECT 1 FROM information_schema.columns 
-                    WHERE table_name='users' AND column_name='subscription_ends_at'
-                ) THEN
-                    ALTER TABLE users ADD COLUMN subscription_ends_at VARCHAR(10);
-                END IF;
-            END $$;
-        """)
-        cursor.execute("""
-            DO $$ 
-            BEGIN
-                IF NOT EXISTS (
-                    SELECT 1 FROM information_schema.columns 
-                    WHERE table_name='users' AND column_name='trial_used'
-                ) THEN
-                    ALTER TABLE users ADD COLUMN trial_used BOOLEAN DEFAULT FALSE;
-                END IF;
-            END $$;
-        """)
-        
-        # Add last_checkin_sent_date column to track when check-in notification was sent
-        cursor.execute("""
-            DO $$ 
-            BEGIN
-                IF NOT EXISTS (
-                    SELECT 1 FROM information_schema.columns 
-                    WHERE table_name='users' AND column_name='last_checkin_sent_date'
-                ) THEN
-                    ALTER TABLE users ADD COLUMN last_checkin_sent_date VARCHAR(10);
-                END IF;
-            END $$;
-        """)
+    # Subscription: end date (inclusive), trial used once
+    cursor.execute("""
+        DO $$ 
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns 
+                WHERE table_name='users' AND column_name='subscription_ends_at'
+            ) THEN
+                ALTER TABLE users ADD COLUMN subscription_ends_at VARCHAR(10);
+            END IF;
+        END $$;
+    """)
+    cursor.execute("""
+        DO $$ 
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns 
+                WHERE table_name='users' AND column_name='trial_used'
+            ) THEN
+                ALTER TABLE users ADD COLUMN trial_used BOOLEAN DEFAULT FALSE;
+            END IF;
+        END $$;
+    """)
+    
+    # Add last_checkin_sent_date column to track when check-in notification was sent
+    cursor.execute("""
+        DO $$ 
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns 
+                WHERE table_name='users' AND column_name='last_checkin_sent_date'
+            ) THEN
+                ALTER TABLE users ADD COLUMN last_checkin_sent_date VARCHAR(10);
+            END IF;
+        END $$;
+    """)
 
-        # Payments table for YooKassa: link payment_id -> user_id (webhook)
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS payments (
-                id SERIAL PRIMARY KEY,
-                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                yookassa_payment_id VARCHAR(100) UNIQUE NOT NULL,
-                amount_rub INTEGER NOT NULL,
-                status VARCHAR(20) DEFAULT 'pending',
-                created_at VARCHAR(50) NOT NULL
-            )
-        """)
-        cursor.execute("""
-            CREATE INDEX IF NOT EXISTS idx_payments_yookassa_id ON payments(yookassa_payment_id);
-        """)
-        cursor.execute("""
-            DO $$ 
-            BEGIN
-                IF NOT EXISTS (
-                    SELECT 1 FROM information_schema.columns 
-                    WHERE table_name='payments' AND column_name='telegram_message_id'
-                ) THEN
-                    ALTER TABLE payments ADD COLUMN telegram_message_id INTEGER;
-                END IF;
-            END $$;
-        """)
-        cursor.execute("""
-            DO $$ 
-            BEGIN
-                IF EXISTS (
-                    SELECT 1 FROM information_schema.columns 
-                    WHERE table_name='payments' AND column_name='amount_cents'
-                ) THEN
-                    ALTER TABLE payments RENAME COLUMN amount_cents TO amount_rub;
-                END IF;
-            END $$;
-        """)
-        cursor.execute("""
-            UPDATE payments SET amount_rub = amount_rub / 100 WHERE amount_rub > 1000
-        """)
+    # Payments table for YooKassa: link payment_id -> user_id (webhook)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS payments (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            yookassa_payment_id VARCHAR(100) UNIQUE NOT NULL,
+            amount_rub INTEGER NOT NULL,
+            status VARCHAR(20) DEFAULT 'pending',
+            created_at VARCHAR(50) NOT NULL
+        )
+    """)
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_payments_yookassa_id ON payments(yookassa_payment_id);
+    """)
+    cursor.execute("""
+        DO $$ 
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns 
+                WHERE table_name='payments' AND column_name='telegram_message_id'
+            ) THEN
+                ALTER TABLE payments ADD COLUMN telegram_message_id INTEGER;
+            END IF;
+        END $$;
+    """)
+    cursor.execute("""
+        DO $$ 
+        BEGIN
+            IF EXISTS (
+                SELECT 1 FROM information_schema.columns 
+                WHERE table_name='payments' AND column_name='amount_cents'
+            ) THEN
+                ALTER TABLE payments RENAME COLUMN amount_cents TO amount_rub;
+            END IF;
+        END $$;
+    """)
+    cursor.execute("""
+        UPDATE payments SET amount_rub = amount_rub / 100 WHERE amount_rub > 1000
+    """)
 
-        # Create events table
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS events (
-                id SERIAL PRIMARY KEY,
-                user_id INTEGER NOT NULL,
-                datetime VARCHAR(50),
-                text TEXT,
-                analysis TEXT,
-                analyzed INTEGER DEFAULT 0,
-                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-            )
-        """)
-        
-        # Create index on telegram_id for faster lookups
-        cursor.execute("""
-            CREATE INDEX IF NOT EXISTS idx_users_telegram_id ON users(telegram_id);
-        """)
-        
-        # Create index on user_id and datetime for events
-        cursor.execute("""
-            CREATE INDEX IF NOT EXISTS idx_events_user_datetime ON events(user_id, datetime);
-        """)
+    # Create events table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS events (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            datetime VARCHAR(50),
+            text TEXT,
+            analysis TEXT,
+            analyzed INTEGER DEFAULT 0,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+    """)
+    
+    # Create index on telegram_id for faster lookups
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_users_telegram_id ON users(telegram_id);
+    """)
+    
+    # Create index on user_id and datetime for events
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_events_user_datetime ON events(user_id, datetime);
+    """)
 
     conn.commit()
 
