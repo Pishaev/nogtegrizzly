@@ -41,6 +41,38 @@ body {
     flex-direction: column;
 }
 
+#mainScreen {
+    position: relative;
+}
+
+.mascot-area {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 56px;
+    pointer-events: none;
+    z-index: 5;
+}
+
+.mascot {
+    position: absolute;
+    width: 72px;
+    height: auto;
+    object-fit: contain;
+    transition: left 4s linear, top 4s ease-in-out;
+}
+
+.mascot.waving {
+    animation: mascotWave 0.6s ease-in-out;
+}
+
+@keyframes mascotWave {
+    0%, 100% { transform: rotate(0deg) scale(1); }
+    25% { transform: rotate(-12deg) scale(1.05); }
+    75% { transform: rotate(8deg) scale(1.05); }
+}
+
 .container {
     max-width: 100%;
     margin: 0 auto;

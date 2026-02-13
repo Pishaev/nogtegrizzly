@@ -59,6 +59,7 @@ async function init() {
         setupEventHandlers();
         renderCalendar(new Date().getFullYear(), new Date().getMonth());
         setActiveNav('mainScreen');
+        initMascot();
     } catch (error) {
         console.error('Ошибка инициализации:', error);
         tg.showAlert('Ошибка загрузки данных. Попробуйте позже.');
@@ -154,7 +155,8 @@ function getForecast() {
         const pct = Math.round((streak / level.days) * 100);
         forecasts.push(`Ты уже прошёл ${pct}% пути до следующего уровня.`);
     }
-    forecasts.push(`Твоя серия — это ${streak} ${streak === 1 ? 'день' : streak < 5 ? 'дня' : 'дней'} силы воли. Продолжай!`);
+    const dayWord = (n) => (n % 10 === 1 && n % 100 !== 11) ? 'день' : (n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20)) ? 'дня' : 'дней';
+    forecasts.push(`Твоя серия — это ${streak} ${dayWord(streak)} силы воли. Продолжай!`);
     forecasts.push(atMaxLevel ? 'Ты достиг уровня «Свобода»! Держи планку!' : 'Каждый день без грызения делает тебя ближе к свободе.');
     const idx = new Date().getDate() % Math.max(1, forecasts.length);
     return forecasts[idx];
@@ -418,6 +420,44 @@ function drawChart(chartData) {
         ctx.arc(x, y, 4, 0, Math.PI * 2);
         ctx.fill();
     });
+}
+
+function initMascot() {
+    const mascot = document.getElementById('mascot');
+    const area = document.querySelector('.mascot-area');
+    if (!mascot || !area) return;
+
+    function random(min, max) {
+        return Math.floor(Math.random() * (max - min + 1)) + min;
+    }
+
+    function moveMascot() {
+        const rect = area.getBoundingClientRect();
+        const w = mascot.offsetWidth || 72;
+        const h = mascot.offsetHeight || 80;
+        const left = random(5, Math.max(5, rect.width - w - 10));
+        const top = random(10, Math.max(10, rect.height - h - 20));
+        mascot.style.left = left + 'px';
+        mascot.style.top = top + 'px';
+    }
+
+    function wave() {
+        mascot.classList.add('waving');
+        setTimeout(() => mascot.classList.remove('waving'), 600);
+    }
+
+    mascot.style.left = '20px';
+    mascot.style.top = '30px';
+
+    setInterval(() => {
+        if (!document.getElementById('mainScreen').classList.contains('active')) return;
+        if (Math.random() < 0.25) {
+            wave();
+            setTimeout(moveMascot, 700);
+        } else {
+            moveMascot();
+        }
+    }, 4000);
 }
 
 init();
