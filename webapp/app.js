@@ -24,6 +24,14 @@ function getDatesWithEvents() {
 }
 
 const MONTH_NAMES = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
+const LEVELS = [
+    { days: 7, name: 'Базовый уровень' },
+    { days: 14, name: 'Стойкий' },
+    { days: 30, name: 'Контроль' },
+    { days: 90, name: 'Свобода' },
+];
+const WEEKDAY_NAMES = ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'];
+const WEEKDAY_SHORT = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
 
 function formatDateKey(year, month, day) {
     const m = String(month + 1).padStart(2, '0');
@@ -100,10 +108,148 @@ async function loadEventsData() {
     }
 }
 
+function getNextLevel(streak) {
+    for (const level of LEVELS) {
+        if (streak < level.days) return level;
+    }
+    return LEVELS[LEVELS.length - 1];
+}
+
+function renderProgressBar() {
+    const streak = userData?.current_streak ?? 0;
+    const level = getNextLevel(streak);
+    const filled = Math.min(streak, level.days);
+    const total = level.days;
+    document.getElementById('levelName').textContent = level.name;
+    document.getElementById('progressLabel').textContent = `${filled}/${total} дней`;
+    const bar = document.getElementById('progressBar');
+    const maxSegments = 14;
+    const segTotal = total <= maxSegments ? total : maxSegments;
+    const segFilled = total <= maxSegments ? filled : Math.round((filled / total) * segTotal);
+    let html = '';
+    for (let i = 0; i < segTotal; i++) {
+        const cls = i < segFilled ? 'progress-segment filled' : 'progress-segment empty';
+        html += `<span class="${cls}"></span>`;
+    }
+    bar.innerHTML = html;
+}
+
+function getForecast() {
+    const streak = userData?.current_streak ?? 0;
+    const maxStreak = userData?.max_streak ?? 0;
+    const level = getNextLevel(streak);
+    const daysLeft = level.days - streak;
+    const atMaxLevel = streak >= 90;
+    const forecasts = [];
+    if (streak < maxStreak && maxStreak > 0) {
+        const toRecord = maxStreak - streak;
+        forecasts.push(`Если ты продержишься ещё ${toRecord} ${toRecord === 1 ? 'день' : toRecord < 5 ? 'дня' : 'дней'} — это будет твоя самая длинная серия!`);
+    }
+    if (daysLeft > 0) {
+        forecasts.push(`Ещё ${daysLeft} ${daysLeft === 1 ? 'день' : daysLeft < 5 ? 'дня' : 'дней'} до уровня «${level.name}».`);
+    }
+    if (level.days > 0 && streak > 0 && !atMaxLevel) {
+        const pct = Math.round((streak / level.days) * 100);
+        forecasts.push(`Ты уже прошёл ${pct}% пути до следующего уровня.`);
+    }
+    forecasts.push(`Твоя серия — это ${streak} ${streak === 1 ? 'день' : streak < 5 ? 'дня' : 'дней'} силы воли. Продолжай!`);
+    forecasts.push(atMaxLevel ? 'Ты достиг уровня «Свобода»! Держи планку!' : 'Каждый день без грызения делает тебя ближе к свободе.');
+    const idx = new Date().getDate() % Math.max(1, forecasts.length);
+    return forecasts[idx];
+}
+
+function getDailyPhrase() {
+    const events = eventsData?.events || [];
+    const today = new Date().toISOString().slice(0, 10);
+    const bitToday = events.some(e => e.datetime && e.datetime.startsWith(today));
+    const streak = userData?.current_streak ?? 0;
+    const phrasesAll = [
+        'Ты уже сильнее, чем вчера.',
+        'Один день — это победа.',
+        'Срывы бывают. Важно не останавливаться.',
+        'Сегодня не получилось — завтра получится.',
+        'Один срыв не отменяет твоих побед.',
+        'Ты держишься отлично. Так держать!',
+        'Каждый день — шаг к свободе.',
+        'Ты молодец, что возвращаешься снова.',
+        'Не идеал важен, а движение вперёд.',
+        'Маленькие победы ведут к большим.',
+        'Завтра — новый день и новый шанс.',
+        'Ты справляешься лучше, чем думаешь.',
+    ];
+    let pool = phrasesAll;
+    if (bitToday && streak === 0) pool = phrasesAll.slice(2, 6);
+    else if (bitToday) pool = phrasesAll.slice(2, 5);
+    else if (streak >= 7) pool = phrasesAll.slice(5, 8).concat(phrasesAll.slice(0, 2));
+    const dayOfYear = Math.floor((new Date() - new Date(new Date().getFullYear(), 0, 0)) / 86400000);
+    return pool[dayOfYear % pool.length];
+}
+
 function updateMainScreen() {
     if (!userData) return;
     document.getElementById('userName').textContent = userData.name || 'друг';
     document.getElementById('currentStreak').textContent = userData.current_streak ?? 0;
+    document.getElementById('dailyPhrase').textContent = getDailyPhrase();
+    renderProgressBar();
+    document.getElementById('forecastText').textContent = getForecast();
+}
+
+function computeAnalytics() {
+    const events = eventsData?.events || [];
+    if (events.length === 0) {
+        return {
+            topDay: '—',
+            topHour: '—',
+            weekTopDay: '—',
+            avgPerMonth: '—',
+            percentClean: '—',
+        };
+    }
+    const byWeekday = [0, 0, 0, 0, 0, 0, 0];
+    const byHour = new Array(24).fill(0);
+    const datesSet = new Set();
+    let firstDate = null;
+    let lastDate = null;
+    events.forEach(e => {
+        if (!e.datetime) return;
+        const dt = new Date(e.datetime);
+        if (isNaN(dt.getTime())) return;
+        byWeekday[dt.getDay()]++;
+        byHour[dt.getHours()]++;
+        const d = e.datetime.slice(0, 10);
+        datesSet.add(d);
+        if (!firstDate || d < firstDate) firstDate = d;
+        if (!lastDate || d > lastDate) lastDate = d;
+    });
+    const topDayIdx = byWeekday.indexOf(Math.max(...byWeekday));
+    const topDay = WEEKDAY_NAMES[topDayIdx];
+    const topHourIdx = byHour.indexOf(Math.max(...byHour));
+    const topHour = `${String(topHourIdx).padStart(2, '0')}:00`;
+    const now = new Date();
+    const weekStart = new Date(now);
+    weekStart.setDate(now.getDate() - now.getDay() + 1);
+    weekStart.setHours(0, 0, 0, 0);
+    const weekByDay = [0, 0, 0, 0, 0, 0, 0];
+    events.forEach(e => {
+        if (!e.datetime) return;
+        const dt = new Date(e.datetime);
+        if (dt >= weekStart) weekByDay[dt.getDay()]++;
+    });
+    const weekTopIdx = weekByDay.indexOf(Math.max(...weekByDay));
+    const weekTopDay = Math.max(...weekByDay) > 0 ? WEEKDAY_NAMES[weekTopIdx] : '—';
+    const first = new Date(firstDate);
+    const months = Math.max(1, (now - first) / (30 * 24 * 3600 * 1000));
+    const avgPerMonth = (events.length / months).toFixed(1);
+    const totalDays = Math.ceil((now - first) / (24 * 3600 * 1000)) || 1;
+    const daysWithEvents = datesSet.size;
+    const percentClean = Math.round(((totalDays - daysWithEvents) / totalDays) * 100);
+    return {
+        topDay,
+        topHour,
+        weekTopDay,
+        avgPerMonth,
+        percentClean: percentClean + '%',
+    };
 }
 
 function updateStatsScreen() {
@@ -111,6 +257,12 @@ function updateStatsScreen() {
     document.getElementById('daysWithout').textContent = userData.current_streak ?? 0;
     document.getElementById('eventsCount').textContent = eventsData.events?.length ?? 0;
     drawChart(eventsData.chartData || []);
+    const a = computeAnalytics();
+    document.getElementById('analyticsDay').textContent = a.topDay;
+    document.getElementById('analyticsHour').textContent = a.topHour;
+    document.getElementById('analyticsWeekDay').textContent = a.weekTopDay;
+    document.getElementById('analyticsAvgMonth').textContent = a.avgPerMonth;
+    document.getElementById('analyticsPercentClean').textContent = a.percentClean;
 }
 
 function setActiveNav(screenId) {

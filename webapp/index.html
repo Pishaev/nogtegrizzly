@@ -14,10 +14,19 @@
             <div class="header">
                 <h1>Привет, <span id="userName">друг</span>! 👋</h1>
             </div>
+            <p class="daily-phrase" id="dailyPhrase">Ты уже сильнее, чем вчера.</p>
             <div class="streak-block">
                 <div class="stat-label">Текущая серия</div>
                 <div class="stat-value" id="currentStreak">0</div>
                 <div class="stat-unit">дней без грызения</div>
+            </div>
+            <div class="progress-block">
+                <div class="progress-level-name" id="levelName">Базовый уровень</div>
+                <div class="progress-bar" id="progressBar"></div>
+                <div class="progress-label" id="progressLabel">0/7 дней</div>
+            </div>
+            <div class="forecast-block" id="forecastBlock">
+                <p class="forecast-text" id="forecastText"></p>
             </div>
         </div>
     </div>
@@ -40,6 +49,31 @@
             </div>
             <div class="chart-container">
                 <canvas id="streakChart"></canvas>
+            </div>
+            <div class="analytics-section">
+                <h3 class="analytics-title">Аналитика</h3>
+                <div class="analytics-grid">
+                    <div class="analytics-card">
+                        <div class="analytics-label">Чаще срывы в день недели</div>
+                        <div class="analytics-value" id="analyticsDay">—</div>
+                    </div>
+                    <div class="analytics-card">
+                        <div class="analytics-label">Чаще срывы в час</div>
+                        <div class="analytics-value" id="analyticsHour">—</div>
+                    </div>
+                    <div class="analytics-card">
+                        <div class="analytics-label">Больше срывов на этой неделе</div>
+                        <div class="analytics-value" id="analyticsWeekDay">—</div>
+                    </div>
+                    <div class="analytics-card">
+                        <div class="analytics-label">Среднее срывов в месяц</div>
+                        <div class="analytics-value" id="analyticsAvgMonth">—</div>
+                    </div>
+                    <div class="analytics-card full-width">
+                        <div class="analytics-label">% дней без грызения</div>
+                        <div class="analytics-value" id="analyticsPercentClean">—</div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
