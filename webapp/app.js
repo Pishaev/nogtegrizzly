@@ -31,6 +31,8 @@ const LEVELS = [
     { days: 90, name: 'Свобода' },
 ];
 const WEEKDAY_NAMES = ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'];
+const WEEKDAY_ACCUSATIVE = ['воскресенье', 'понедельник', 'вторник', 'среду', 'четверг', 'пятницу', 'субботу'];
+const WEEKDAY_DATIVE = ['воскресеньям', 'понедельникам', 'вторникам', 'средам', 'четвергам', 'пятницам', 'субботам'];
 const WEEKDAY_SHORT = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
 
 function formatDateKey(year, month, day) {
@@ -196,6 +198,13 @@ function updateMainScreen() {
 
 function computeAnalytics() {
     const events = eventsData?.events || [];
+    const now = new Date();
+    const weekStart = new Date(now);
+    weekStart.setDate(now.getDate() - now.getDay() + 1);
+    weekStart.setHours(0, 0, 0, 0);
+    const dayMs = 24 * 3600 * 1000;
+    const daysThisWeek = Math.ceil((now - weekStart) / dayMs) || 1;
+
     if (events.length === 0) {
         return {
             topDay: '—',
@@ -205,44 +214,50 @@ function computeAnalytics() {
             percentClean: '—',
         };
     }
-    const byWeekday = [0, 0, 0, 0, 0, 0, 0];
-    const byHour = new Array(24).fill(0);
+
     const datesSet = new Set();
     let firstDate = null;
-    let lastDate = null;
+    const weekByDay = [0, 0, 0, 0, 0, 0, 0];
+    const weekByHourSlot = new Array(12).fill(0);
+
     events.forEach(e => {
         if (!e.datetime) return;
         const dt = new Date(e.datetime);
         if (isNaN(dt.getTime())) return;
-        byWeekday[dt.getDay()]++;
-        byHour[dt.getHours()]++;
         const d = e.datetime.slice(0, 10);
         datesSet.add(d);
         if (!firstDate || d < firstDate) firstDate = d;
-        if (!lastDate || d > lastDate) lastDate = d;
+        if (dt >= weekStart) {
+            weekByDay[dt.getDay()]++;
+            const slot = Math.floor(dt.getHours() / 2);
+            weekByHourSlot[slot]++;
+        }
     });
-    const topDayIdx = byWeekday.indexOf(Math.max(...byWeekday));
-    const topDay = WEEKDAY_NAMES[topDayIdx];
-    const topHourIdx = byHour.indexOf(Math.max(...byHour));
-    const topHour = `${String(topHourIdx).padStart(2, '0')}:00`;
-    const now = new Date();
-    const weekStart = new Date(now);
-    weekStart.setDate(now.getDate() - now.getDay() + 1);
-    weekStart.setHours(0, 0, 0, 0);
-    const weekByDay = [0, 0, 0, 0, 0, 0, 0];
-    events.forEach(e => {
-        if (!e.datetime) return;
-        const dt = new Date(e.datetime);
-        if (dt >= weekStart) weekByDay[dt.getDay()]++;
-    });
+
+    const topDayIdx = weekByDay.indexOf(Math.max(...weekByDay));
+    const topDay = Math.max(...weekByDay) > 0 ? WEEKDAY_ACCUSATIVE[topDayIdx] : '—';
+
+    const topSlotIdx = weekByHourSlot.indexOf(Math.max(...weekByHourSlot));
+    const startHour = topSlotIdx * 2;
+    const endHour = Math.min(startHour + 2, 24);
+    const topHour = Math.max(...weekByHourSlot) > 0
+        ? `${String(startHour).padStart(2, '0')}:00-${String(endHour).padStart(2, '0')}:00`
+        : '—';
+
     const weekTopIdx = weekByDay.indexOf(Math.max(...weekByDay));
-    const weekTopDay = Math.max(...weekByDay) > 0 ? WEEKDAY_NAMES[weekTopIdx] : '—';
+    const weekTopDay = Math.max(...weekByDay) > 0 ? WEEKDAY_DATIVE[weekTopIdx] : '—';
+
+    const eventsThisWeek = events.filter(e => {
+        if (!e.datetime) return false;
+        return new Date(e.datetime) >= weekStart;
+    }).length;
+    const avgPerMonth = Math.ceil(eventsThisWeek / daysThisWeek).toString();
+
     const first = new Date(firstDate);
-    const months = Math.max(1, (now - first) / (30 * 24 * 3600 * 1000));
-    const avgPerMonth = (events.length / months).toFixed(1);
-    const totalDays = Math.ceil((now - first) / (24 * 3600 * 1000)) || 1;
+    const totalDays = Math.max(1, Math.ceil((now - first) / dayMs));
     const daysWithEvents = datesSet.size;
     const percentClean = Math.round(((totalDays - daysWithEvents) / totalDays) * 100);
+
     return {
         topDay,
         topHour,
