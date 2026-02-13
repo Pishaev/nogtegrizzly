@@ -48,6 +48,7 @@ async function init() {
         updateMainScreen();
         setupEventHandlers();
         renderCalendar(new Date().getFullYear(), new Date().getMonth());
+        setActiveNav('mainScreen');
     } catch (error) {
         console.error('Ошибка инициализации:', error);
         tg.showAlert('Ошибка загрузки данных. Попробуйте позже.');
@@ -112,11 +113,17 @@ function updateStatsScreen() {
     drawChart(eventsData.chartData || []);
 }
 
+function setActiveNav(screenId) {
+    document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
+    const id = screenId === 'mainScreen' ? 'homeBtn' : screenId === 'statsScreen' ? 'statsBtn' : 'calendarBtn';
+    const btn = document.getElementById(id);
+    if (btn) btn.classList.add('active');
+}
+
 function setupEventHandlers() {
+    document.getElementById('homeBtn').addEventListener('click', showMainScreen);
     document.getElementById('statsBtn').addEventListener('click', showStatsScreen);
     document.getElementById('calendarBtn').addEventListener('click', showCalendarScreen);
-    document.getElementById('backBtnStats').addEventListener('click', showMainScreen);
-    document.getElementById('backBtnCalendar').addEventListener('click', showMainScreen);
 
     document.getElementById('prevMonth').addEventListener('click', () => {
         currentCalendarMonth--;
@@ -136,6 +143,7 @@ function showMainScreen() {
     document.getElementById('mainScreen').classList.add('active');
     document.getElementById('statsScreen').classList.remove('active');
     document.getElementById('calendarScreen').classList.remove('active');
+    setActiveNav('mainScreen');
 }
 
 function showStatsScreen() {
@@ -143,6 +151,7 @@ function showStatsScreen() {
     document.getElementById('mainScreen').classList.remove('active');
     document.getElementById('statsScreen').classList.add('active');
     document.getElementById('calendarScreen').classList.remove('active');
+    setActiveNav('statsScreen');
 }
 
 function showCalendarScreen() {
@@ -151,6 +160,7 @@ function showCalendarScreen() {
     document.getElementById('mainScreen').classList.remove('active');
     document.getElementById('statsScreen').classList.remove('active');
     document.getElementById('calendarScreen').classList.add('active');
+    setActiveNav('calendarScreen');
 }
 
 function updateCalendarTitle(year, month) {
@@ -161,7 +171,7 @@ function renderCalendar(year, month) {
     const datesWithEvents = getDatesWithEvents();
     const firstDay = new Date(year, month, 1);
     const lastDay = new Date(year, month + 1, 0);
-    const startWeekday = (firstDay.getDay() + 6) % 7; // Пн = 0
+    const startWeekday = (firstDay.getDay() + 6) % 7;
     const daysInMonth = lastDay.getDate();
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -170,7 +180,7 @@ function renderCalendar(year, month) {
     for (let i = 0; i < startWeekday; i++) {
         const prevMonthDay = new Date(year, month, 1 - (startWeekday - i));
         const dayNum = prevMonthDay.getDate();
-        html += `<div class="calendar-day other-month">${dayNum}</div>`;
+        html += `<div class="calendar-day other-month"><span class="day-num">${dayNum}</span></div>`;
     }
     for (let day = 1; day <= daysInMonth; day++) {
         const key = formatDateKey(year, month, day);
@@ -180,8 +190,10 @@ function renderCalendar(year, month) {
         const hasEvents = datesWithEvents.has(key);
         let cls = 'calendar-day';
         if (isToday(year, month, day)) cls += ' today';
-        if (isPast) cls += hasEvents ? ' red' : ' green';
-        html += `<div class="${cls}">${day}</div>`;
+        if (isPast) cls += ' past';
+        const dotClass = isPast ? (hasEvents ? 'red' : 'green') : '';
+        const dotHtml = dotClass ? `<span class="day-dot ${dotClass}"></span>` : '';
+        html += `<div class="${cls}"><span class="day-num">${day}</span>${dotHtml}</div>`;
     }
     document.getElementById('calendarGrid').innerHTML = html;
 }

@@ -20,23 +20,12 @@
                 <div class="stat-unit">дней без грызения</div>
             </div>
         </div>
-        <nav class="bottom-nav">
-            <button type="button" class="nav-btn" id="calendarBtn" title="Календарь">
-                <span class="nav-icon">📅</span>
-                <span class="nav-label">Календарь</span>
-            </button>
-            <button type="button" class="nav-btn" id="statsBtn" title="Статистика">
-                <span class="nav-icon">📊</span>
-                <span class="nav-label">Статистика</span>
-            </button>
-        </nav>
     </div>
 
     <!-- Экран 2: Статистика -->
     <div id="statsScreen" class="screen">
         <div class="container">
-            <div class="header row-header">
-                <button type="button" class="back-btn" id="backBtnStats">← Назад</button>
+            <div class="header">
                 <h2>Статистика</h2>
             </div>
             <div class="stats-section">
@@ -57,26 +46,35 @@
 
     <!-- Экран 3: Календарь -->
     <div id="calendarScreen" class="screen">
-        <div class="container">
-            <div class="header row-header">
-                <button type="button" class="back-btn" id="backBtnCalendar">← Назад</button>
-                <h2>Календарь</h2>
-            </div>
+        <div class="container calendar-container">
             <div class="calendar-toolbar">
-                <button type="button" class="month-nav" id="prevMonth">‹</button>
-                <span class="month-title" id="monthTitle">Январь 2025</span>
-                <button type="button" class="month-nav" id="nextMonth">›</button>
-            </div>
-            <div class="calendar-legend">
-                <span class="legend-item"><i class="dot green"></i> Не грызли</span>
-                <span class="legend-item"><i class="dot red"></i> Грызли</span>
+                <button type="button" class="month-nav" id="prevMonth" aria-label="Предыдущий месяц">&lt;</button>
+                <h2 class="month-title" id="monthTitle">Январь 2025</h2>
+                <button type="button" class="month-nav" id="nextMonth" aria-label="Следующий месяц">&gt;</button>
             </div>
             <div class="calendar-weekdays">
                 <span>Пн</span><span>Вт</span><span>Ср</span><span>Чт</span><span>Пт</span><span>Сб</span><span>Вс</span>
             </div>
             <div class="calendar-grid" id="calendarGrid"></div>
+            <div class="calendar-legend">
+                <span class="legend-item"><i class="dot green"></i> Не грызли</span>
+                <span class="legend-item"><i class="dot red"></i> Грызли</span>
+            </div>
         </div>
     </div>
+
+    <!-- Общая нижняя навигация (на всех экранах) -->
+    <nav class="bottom-nav">
+        <button type="button" class="nav-btn" id="homeBtn" title="Главная">
+            <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        </button>
+        <button type="button" class="nav-btn" id="calendarBtn" title="Календарь">
+            <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        </button>
+        <button type="button" class="nav-btn" id="statsBtn" title="Статистика">
+            <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        </button>
+    </nav>
 
     <script src="app.js"></script>
 </body>
