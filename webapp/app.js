@@ -59,7 +59,6 @@ async function init() {
         setupEventHandlers();
         renderCalendar(new Date().getFullYear(), new Date().getMonth());
         setActiveNav('mainScreen');
-        initMascot();
     } catch (error) {
         console.error('Ошибка инициализации:', error);
         tg.showAlert('Ошибка загрузки данных. Попробуйте позже.');
@@ -273,7 +272,6 @@ function updateStatsScreen() {
     if (!userData || !eventsData) return;
     document.getElementById('daysWithout').textContent = userData.current_streak ?? 0;
     document.getElementById('eventsCount').textContent = eventsData.events?.length ?? 0;
-    drawChart(eventsData.chartData || []);
     const a = computeAnalytics();
     document.getElementById('analyticsDay').textContent = a.topDay;
     document.getElementById('analyticsHour').textContent = a.topHour;
@@ -365,99 +363,6 @@ function renderCalendar(year, month) {
         html += `<div class="${cls}"><span class="day-num">${day}</span>${dotHtml}</div>`;
     }
     document.getElementById('calendarGrid').innerHTML = html;
-}
-
-function drawChart(chartData) {
-    const canvas = document.getElementById('streakChart');
-    const ctx = canvas.getContext('2d');
-    const rect = canvas.getBoundingClientRect();
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = rect.width * dpr;
-    canvas.height = rect.height * dpr;
-    ctx.scale(dpr, dpr);
-    const width = rect.width;
-    const height = rect.height;
-    ctx.clearRect(0, 0, width, height);
-
-    if (!chartData || chartData.length === 0) {
-        ctx.fillStyle = '#5a7a8c';
-        ctx.font = '14px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText('Данных пока нет', width / 2, height / 2);
-        return;
-    }
-
-    const maxValue = Math.max(...chartData.map(d => d.value), 1);
-    const padding = 20;
-    const chartWidth = width - padding * 2;
-    const chartHeight = height - padding * 2;
-
-    ctx.strokeStyle = 'rgba(90, 122, 140, 0.3)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(padding, padding);
-    ctx.lineTo(padding, height - padding);
-    ctx.lineTo(width - padding, height - padding);
-    ctx.stroke();
-
-    ctx.strokeStyle = '#5a8fa8';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    const stepX = chartWidth / Math.max(chartData.length - 1, 1);
-    chartData.forEach((point, index) => {
-        const x = padding + index * stepX;
-        const y = height - padding - (point.value / maxValue) * chartHeight;
-        if (index === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-    });
-    ctx.stroke();
-
-    ctx.fillStyle = '#5a8fa8';
-    chartData.forEach((point, index) => {
-        const x = padding + index * stepX;
-        const y = height - padding - (point.value / maxValue) * chartHeight;
-        ctx.beginPath();
-        ctx.arc(x, y, 4, 0, Math.PI * 2);
-        ctx.fill();
-    });
-}
-
-function initMascot() {
-    const mascot = document.getElementById('mascot');
-    const area = document.querySelector('.mascot-area');
-    if (!mascot || !area) return;
-
-    function random(min, max) {
-        return Math.floor(Math.random() * (max - min + 1)) + min;
-    }
-
-    function moveMascot() {
-        const rect = area.getBoundingClientRect();
-        const w = mascot.offsetWidth || 72;
-        const h = mascot.offsetHeight || 80;
-        const left = random(5, Math.max(5, rect.width - w - 10));
-        const top = random(10, Math.max(10, rect.height - h - 20));
-        mascot.style.left = left + 'px';
-        mascot.style.top = top + 'px';
-    }
-
-    function wave() {
-        mascot.classList.add('waving');
-        setTimeout(() => mascot.classList.remove('waving'), 600);
-    }
-
-    mascot.style.left = '20px';
-    mascot.style.top = '30px';
-
-    setInterval(() => {
-        if (!document.getElementById('mainScreen').classList.contains('active')) return;
-        if (Math.random() < 0.25) {
-            wave();
-            setTimeout(moveMascot, 700);
-        } else {
-            moveMascot();
-        }
-    }, 4000);
 }
 
 init();
