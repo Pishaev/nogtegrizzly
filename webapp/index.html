@@ -10,50 +10,71 @@
 <body>
     <!-- Экран 1: Главный -->
     <div id="mainScreen" class="screen active">
-        <div class="container">
+        <div class="container main-container">
             <div class="header">
                 <h1>Привет, <span id="userName">друг</span>! 👋</h1>
             </div>
-            
-            <div class="stats-card">
-                <div class="stat-item">
-                    <div class="stat-label">Текущая серия</div>
-                    <div class="stat-value" id="currentStreak">0</div>
-                    <div class="stat-unit">дней</div>
-                </div>
-            </div>
-
-            <div class="buttons">
-                <button class="btn btn-primary" id="statsBtn">
-                    📊 Статистика
-                </button>
+            <div class="streak-block">
+                <div class="stat-label">Текущая серия</div>
+                <div class="stat-value" id="currentStreak">0</div>
+                <div class="stat-unit">дней без грызения</div>
             </div>
         </div>
+        <nav class="bottom-nav">
+            <button type="button" class="nav-btn" id="calendarBtn" title="Календарь">
+                <span class="nav-icon">📅</span>
+                <span class="nav-label">Календарь</span>
+            </button>
+            <button type="button" class="nav-btn" id="statsBtn" title="Статистика">
+                <span class="nav-icon">📊</span>
+                <span class="nav-label">Статистика</span>
+            </button>
+        </nav>
     </div>
 
     <!-- Экран 2: Статистика -->
     <div id="statsScreen" class="screen">
         <div class="container">
-            <div class="header">
-                <button class="back-btn" id="backBtn">← Назад</button>
+            <div class="header row-header">
+                <button type="button" class="back-btn" id="backBtnStats">← Назад</button>
                 <h2>Статистика</h2>
             </div>
-
             <div class="stats-section">
                 <div class="stat-card">
                     <div class="stat-label">Дней без грызения</div>
                     <div class="stat-value-large" id="daysWithout">0</div>
                 </div>
-
                 <div class="stat-card">
                     <div class="stat-label">Записанных моментов</div>
                     <div class="stat-value-large" id="eventsCount">0</div>
                 </div>
             </div>
-
             <div class="chart-container">
                 <canvas id="streakChart"></canvas>
             </div>
+        </div>
+    </div>
+
+    <!-- Экран 3: Календарь -->
+    <div id="calendarScreen" class="screen">
+        <div class="container">
+            <div class="header row-header">
+                <button type="button" class="back-btn" id="backBtnCalendar">← Назад</button>
+                <h2>Календарь</h2>
+            </div>
+            <div class="calendar-toolbar">
+                <button type="button" class="month-nav" id="prevMonth">‹</button>
+                <span class="month-title" id="monthTitle">Январь 2025</span>
+                <button type="button" class="month-nav" id="nextMonth">›</button>
+            </div>
+            <div class="calendar-legend">
+                <span class="legend-item"><i class="dot green"></i> Не грызли</span>
+                <span class="legend-item"><i class="dot red"></i> Грызли</span>
+            </div>
+            <div class="calendar-weekdays">
+                <span>Пн</span><span>Вт</span><span>Ср</span><span>Чт</span><span>Пт</span><span>Сб</span><span>Вс</span>
+            </div>
+            <div class="calendar-grid" id="calendarGrid"></div>
         </div>
     </div>
 
