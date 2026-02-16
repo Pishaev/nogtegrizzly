@@ -200,8 +200,10 @@ function updateMainScreen() {
 function computeAnalytics() {
     const events = eventsData?.events || [];
     const now = new Date();
+    // Неделя начинается с понедельника: (getDay() + 6) % 7 — дней с понедельника (Вс=6, Пн=0)
+    const daysSinceMonday = (now.getDay() + 6) % 7;
     const weekStart = new Date(now);
-    weekStart.setDate(now.getDate() - now.getDay() + 1);
+    weekStart.setDate(now.getDate() - daysSinceMonday);
     weekStart.setHours(0, 0, 0, 0);
     const dayMs = 24 * 3600 * 1000;
     const daysThisWeek = Math.ceil((now - weekStart) / dayMs) || 1;
