@@ -1015,6 +1015,14 @@ async def keyboard_handler(message: Message, state: FSMContext):
         await state.set_state(TimezoneState.waiting_selection)
     elif message.text == "📊 Статистика бота":
         await admin_stats(message)
+    else:
+        # Любое другое сообщение — подсказка: сначала кнопка, потом текст
+        user = get_user(message.from_user.id)
+        has_sub = has_active_subscription(user) if user else True
+        await message.answer(
+            "Чтобы записать момент, сначала нажми кнопку «📌 Записать момент», а затем напиши, что произошло.",
+            reply_markup=main_keyboard(message.from_user.id == ADMIN_ID, has_sub)
+        )
 
 
 async def admin_stats(message: Message):
