@@ -438,7 +438,7 @@ async def pogryz_start(message: Message, state: FSMContext):
         return
     if message.from_user.id != ADMIN_ID and not has_active_subscription(user):
         await send_paywall(message, user, message.from_user.id == ADMIN_ID)
-        await message.answer("\u200b", reply_markup=main_keyboard(False, False))
+        await message.answer(" ", reply_markup=main_keyboard(False, False))
         return
     await message.answer(
         "Расскажи, что произошло в этот момент: 📝\n\n"
@@ -470,7 +470,7 @@ async def start_review(message: Message, state: FSMContext):
         return
     if message.from_user.id != ADMIN_ID and not has_active_subscription(user):
         await send_paywall(message, user, message.from_user.id == ADMIN_ID)
-        await message.answer("\u200b", reply_markup=main_keyboard(False, False))
+        await message.answer(" ", reply_markup=main_keyboard(False, False))
         return
 
     events = get_today_events(user[0])
@@ -840,7 +840,7 @@ async def button_handler(callback: CallbackQuery, state: FSMContext):
     if callback.from_user.id != ADMIN_ID and not has_active_subscription(user):
         await callback.message.edit_reply_markup(None)
         await send_paywall(callback.message, user, False)
-        await callback.message.answer("\u200b", reply_markup=main_keyboard(False, False))
+        await callback.message.answer(" ", reply_markup=main_keyboard(False, False))
         await safe_callback_answer(callback)
         return
 
@@ -953,7 +953,7 @@ async def keyboard_handler(message: Message, state: FSMContext):
             return
         if message.from_user.id != ADMIN_ID and not has_active_subscription(user):
             await send_paywall(message, user, message.from_user.id == ADMIN_ID)
-            await message.answer("\u200b", reply_markup=main_keyboard(False, False))
+            await message.answer(" ", reply_markup=main_keyboard(False, False))
             return
         await pogryz_start(message, state)
     elif message.text == "💳 Подписка":
@@ -975,12 +975,12 @@ async def keyboard_handler(message: Message, state: FSMContext):
             )
         else:
             await send_paywall(message, user, message.from_user.id == ADMIN_ID)
-            await message.answer("\u200b", reply_markup=main_keyboard(message.from_user.id == ADMIN_ID, False))
+            await message.answer(" ", reply_markup=main_keyboard(message.from_user.id == ADMIN_ID, False))
     elif message.text == "⚙️ Настройки":
         user = get_user(message.from_user.id)
         if user and message.from_user.id != ADMIN_ID and not has_active_subscription(user):
             await send_paywall(message, user, False)
-            await message.answer("\u200b", reply_markup=main_keyboard(False, False))
+            await message.answer(" ", reply_markup=main_keyboard(False, False))
             return
         await message.answer(
             "⚙️ Настройки\n\nВыберите, что хотите настроить:",
@@ -1075,7 +1075,7 @@ async def broadcast_keyboard_on_startup(bot: Bot):
                 has_sub = has_active_subscription(user_row) if user_row else False
                 await bot.send_message(
                     tg_id,
-                    "\u200b",
+                    " ",
                     reply_markup=main_keyboard(is_admin=is_admin, has_subscription=has_sub)
                 )
                 await asyncio.sleep(0.05)  # Небольшая пауза, чтобы не упереться в лимиты
