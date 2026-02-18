@@ -787,13 +787,34 @@ async def button_handler(callback: CallbackQuery, state: FSMContext):
             
             tz_info = RUSSIAN_TIMEZONES[tz_key]
             set_timezone(user[0], tz_info["offset"])
+            user = get_user(callback.from_user.id)  # обновить данные
+            
+            # Для новых пользователей без подписки — автоматически активируем триал
+            if callback.from_user.id != ADMIN_ID and not has_active_subscription(user) and not get_trial_used(user):
+                set_subscription_ends_at(user[0], (date.today() + timedelta(days=TRIAL_DAYS)).isoformat())
+                set_trial_used(user[0], True)
+                user = get_user(callback.from_user.id)
+                trial_activated = True
+            else:
+                trial_activated = False
+            
             await callback.message.edit_reply_markup(None)
             name = get_display_name(user)
-            await callback.message.answer(
-                f"✅ Часовой пояс установлен: {tz_info['name']} (UTC+{tz_info['offset']}) 🌍\n\n"
-            f"{name}, теперь все напоминания будут приходить по твоему местному времени!",
-                reply_markup=main_keyboard(callback.from_user.id == ADMIN_ID, has_active_subscription(user))
-            )
+            if trial_activated:
+                end_date = date.today() + timedelta(days=TRIAL_DAYS)
+                await callback.message.answer(
+                    f"✅ Часовой пояс установлен: {tz_info['name']} (UTC+{tz_info['offset']}) 🌍\n\n"
+                    f"🎁 Для тебя активирован пробный период {TRIAL_DAYS} дней! "
+                    f"Подписка действует до {end_date.strftime('%d.%m.%Y')}.\n\n"
+                    f"{name}, теперь ты можешь пользоваться всеми функциями бота! 🙌💙",
+                    reply_markup=main_keyboard(callback.from_user.id == ADMIN_ID, has_active_subscription(user))
+                )
+            else:
+                await callback.message.answer(
+                    f"✅ Часовой пояс установлен: {tz_info['name']} (UTC+{tz_info['offset']}) 🌍\n\n"
+                    f"{name}, теперь все напоминания будут приходить по твоему местному времени!",
+                    reply_markup=main_keyboard(callback.from_user.id == ADMIN_ID, has_active_subscription(user))
+                )
             await state.clear()
             await safe_callback_answer(callback)
         return
