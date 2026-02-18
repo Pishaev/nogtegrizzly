@@ -223,6 +223,7 @@ function computeAnalytics() {
     const weekByDay = [0, 0, 0, 0, 0, 0, 0];
     const weekByHourSlot = new Array(12).fill(0);
 
+    // datetime приходит в UTC (с суффиксом Z). getHours()/getDay() дают локальное время пользователя.
     events.forEach(e => {
         if (!e.datetime) return;
         const dt = new Date(e.datetime);

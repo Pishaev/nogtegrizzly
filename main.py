@@ -1324,8 +1324,21 @@ async def api_events_handler(request):
                 "value": count
             })
         
+        # События хранятся в UTC (сервер). Отдаём datetime с суффиксом Z,
+        # чтобы в браузере new Date() парсил как UTC и getHours() давал локальный час.
+        def as_utc_iso(dt_str):
+            if not dt_str:
+                return dt_str
+            s = (dt_str.strip() or "").rstrip("Zz")
+            if not s:
+                return dt_str
+            # Уже указана таймзона (например +03:00 или -05:00)
+            if "+" in s[-6:] or (len(s) >= 6 and s[-6] in "+-" and ":" in s[-3:]):
+                return dt_str
+            return s + "Z"
+
         response_data = {
-            "events": [{"datetime": e[0], "text": e[1]} for e in events],
+            "events": [{"datetime": as_utc_iso(e[0]), "text": e[1]} for e in events],
             "chartData": chart_data
         }
         
