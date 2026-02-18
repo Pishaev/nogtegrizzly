@@ -48,6 +48,17 @@ except ImportError:
     def set_last_checkin_sent_date(user_id, date_str):
         pass
 
+# Опциональный импорт функций для отслеживания уведомлений об окончании подписки
+try:
+    from db import get_last_subscription_expiry_notified_date, set_last_subscription_expiry_notified_date
+except ImportError:
+    # Если функции еще не добавлены в db.py, создаем заглушки
+    def get_last_subscription_expiry_notified_date(user_id):
+        return None
+    
+    def set_last_subscription_expiry_notified_date(user_id, date_str):
+        pass
+
 moscow_tz = timezone(timedelta(hours=3))
 
 # --- Переменные окружения (задать в Railway: Variables) ---
@@ -592,6 +603,36 @@ async def reminder_loop(bot: Bot):
                 now_str = user_local_time.strftime("%H:%M")
                 current_hour = user_local_time.hour
                 current_minute = user_local_time.minute
+                
+                # Уведомление об окончании подписки (10:00 утра)
+                if current_hour == 10 and current_minute == 0:
+                    user_row = get_user(tg_id)
+                    if user_row:
+                        sub_end = get_subscription_ends_at(user_row)
+                        if sub_end:
+                            try:
+                                end_date = date.fromisoformat(sub_end)
+                                # Если подписка заканчивается сегодня
+                                if end_date == date.today():
+                                    # Проверяем, что уведомление еще не было отправлено сегодня
+                                    last_notified = get_last_subscription_expiry_notified_date(user_id)
+                                    if last_notified != today_str:
+                                        name = get_display_name(user_row)
+                                        is_trial = get_trial_used(user_row)
+                                        trial_text = "пробный период" if is_trial else "подписка"
+                                        try:
+                                            await bot.send_message(
+                                                tg_id,
+                                                f"📢 {name}, сегодня заканчивается твой {trial_text}! 📅\n\n"
+                                                "Чтобы продолжить пользоваться ботом (записывать моменты, "
+                                                "вечерний разбор и напоминания), оформи подписку. 💙",
+                                                reply_markup=subscription_keyboard(user_row)
+                                            )
+                                            set_last_subscription_expiry_notified_date(user_id, today_str)
+                                        except Exception:
+                                            pass  # Skip if user blocked bot or other error
+                            except (ValueError, TypeError):
+                                pass
                 
                 # 1:00 PM check-in notification (13:00-13:01)
                 # Проверяем диапазон, чтобы не пропустить уведомление

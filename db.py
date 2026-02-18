@@ -225,6 +225,19 @@ def _init_db_with_connection(conn):
             END IF;
         END $$;
     """)
+    
+    # Add last_subscription_expiry_notified_date to track subscription expiry notifications
+    cursor.execute("""
+        DO $$ 
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns 
+                WHERE table_name='users' AND column_name='last_subscription_expiry_notified_date'
+            ) THEN
+                ALTER TABLE users ADD COLUMN last_subscription_expiry_notified_date VARCHAR(10);
+            END IF;
+        END $$;
+    """)
 
     # Payments table for YooKassa: link payment_id -> user_id (webhook)
     cursor.execute("""
@@ -585,6 +598,33 @@ def set_last_checkin_sent_date(user_id, date_str):
         cursor = conn.cursor()
         cursor.execute(
             "UPDATE users SET last_checkin_sent_date = %s WHERE id = %s",
+            (date_str, user_id)
+        )
+        conn.commit()
+    finally:
+        return_connection(conn)
+
+def get_last_subscription_expiry_notified_date(user_id):
+    """Получить дату последнего отправленного уведомления об окончании подписки (YYYY-MM-DD или None)."""
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT last_subscription_expiry_notified_date FROM users WHERE id = %s",
+            (user_id,)
+        )
+        row = cursor.fetchone()
+        return row[0] if row and row[0] else None
+    finally:
+        return_connection(conn)
+
+def set_last_subscription_expiry_notified_date(user_id, date_str):
+    """Установить дату последнего отправленного уведомления об окончании подписки (YYYY-MM-DD)."""
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE users SET last_subscription_expiry_notified_date = %s WHERE id = %s",
             (date_str, user_id)
         )
         conn.commit()
