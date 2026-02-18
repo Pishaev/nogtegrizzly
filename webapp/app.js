@@ -220,7 +220,8 @@ function computeAnalytics() {
 
     const datesSet = new Set();
     let firstDate = null;
-    const weekByDay = [0, 0, 0, 0, 0, 0, 0];
+    const weekByDay = [0, 0, 0, 0, 0, 0, 0];   // только текущая неделя (для «Чаще срывы на неделе были в»)
+    const allByDay = [0, 0, 0, 0, 0, 0, 0];   // за всё время (для «Больше срывов за все время происходит по»)
     const weekByHourSlot = new Array(12).fill(0);
 
     // datetime приходит в UTC (с суффиксом Z). getHours()/getDay() дают локальное время пользователя.
@@ -231,6 +232,7 @@ function computeAnalytics() {
         const d = e.datetime.slice(0, 10);
         datesSet.add(d);
         if (!firstDate || d < firstDate) firstDate = d;
+        allByDay[dt.getDay()]++;
         if (dt >= weekStart) {
             weekByDay[dt.getDay()]++;
             const slot = Math.floor(dt.getHours() / 2);
@@ -248,8 +250,8 @@ function computeAnalytics() {
         ? `${String(startHour).padStart(2, '0')}:00-${String(endHour).padStart(2, '0')}:00`
         : '—';
 
-    const weekTopIdx = weekByDay.indexOf(Math.max(...weekByDay));
-    const weekTopDay = Math.max(...weekByDay) > 0 ? WEEKDAY_DATIVE[weekTopIdx] : '—';
+    const weekTopIdx = allByDay.indexOf(Math.max(...allByDay));
+    const weekTopDay = Math.max(...allByDay) > 0 ? WEEKDAY_DATIVE[weekTopIdx] : '—';
 
     const eventsThisWeek = events.filter(e => {
         if (!e.datetime) return false;
@@ -337,8 +339,15 @@ function updateCalendarTitle(year, month) {
     document.getElementById('monthTitle').textContent = MONTH_NAMES[month] + ' ' + year;
 }
 
+function getRegistrationDateKey() {
+    const created = userData?.created_at;
+    if (!created || created.length < 10) return null;
+    return created.slice(0, 10);
+}
+
 function renderCalendar(year, month) {
     const datesWithEvents = getDatesWithEvents();
+    const registrationDateKey = getRegistrationDateKey();
     const firstDay = new Date(year, month, 1);
     const lastDay = new Date(year, month + 1, 0);
     const startWeekday = (firstDay.getDay() + 6) % 7;
@@ -357,11 +366,12 @@ function renderCalendar(year, month) {
         const cellDate = new Date(year, month, day);
         cellDate.setHours(0, 0, 0, 0);
         const isPast = cellDate < today;
+        const isBeforeRegistration = registrationDateKey && key < registrationDateKey;
         const hasEvents = datesWithEvents.has(key);
         let cls = 'calendar-day';
         if (isToday(year, month, day)) cls += ' today';
         if (isPast) cls += ' past';
-        const dotClass = isPast ? (hasEvents ? 'red' : 'green') : '';
+        const dotClass = isPast && !isBeforeRegistration ? (hasEvents ? 'red' : 'green') : '';
         const dotHtml = dotClass ? `<span class="day-dot ${dotClass}"></span>` : '';
         html += `<div class="${cls}"><span class="day-num">${day}</span>${dotHtml}</div>`;
     }

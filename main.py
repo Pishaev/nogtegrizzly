@@ -1255,11 +1255,13 @@ async def api_user_handler(request):
             print(f"API /api/user: пользователь не найден telegram_id={telegram_id}")
             return web.Response(status=404, text=json.dumps({"error": "User not found"}))
         
-        # Формируем ответ
+        # Формируем ответ (created_at — дата регистрации в боте, для календаря)
+        created_at = user[7] if len(user) > 7 and user[7] else None
         response_data = {
             "name": get_user_name(user) or "друг",
             "current_streak": user[2] or 0,
             "max_streak": user[3] or 0,
+            "created_at": created_at[:10] if created_at and len(created_at) >= 10 else None,
         }
         
         print(f"API /api/user: OK telegram_id={telegram_id}")
