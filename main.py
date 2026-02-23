@@ -75,6 +75,9 @@ YOOKASSA_SECRET_KEY = os.environ.get("YOOKASSA_SECRET_KEY") # Секретный
 # YOOKASSA_RETURN_URL — куда вернуть пользователя после оплаты (по умолчанию https://t.me/)
 # Порт для вебхука ЮKassa берётся из PORT (Railway подставляет сам) — ничего указывать не нужно
 
+# Бесплатный режим: весь функционал доступен всем, кнопка подписки остаётся (на будущее)
+FREE_MODE = True
+
 # Инициализация БД при старте (с обработкой ошибок)
 try:
     init_db()
@@ -147,7 +150,10 @@ def get_trial_used(user):
     return False
 
 def has_active_subscription(user):
-    """Подписка активна (включая пробный период): сегодня <= subscription_ends_at."""
+    """Подписка активна (включая пробный период): сегодня <= subscription_ends_at.
+    В FREE_MODE всегда True — весь функционал доступен всем."""
+    if FREE_MODE:
+        return True
     end = get_subscription_ends_at(user)
     if not end:
         return False
@@ -449,7 +455,7 @@ async def pogryz_start(message: Message, state: FSMContext):
         return
     if message.from_user.id != ADMIN_ID and not has_active_subscription(user):
         await send_paywall(message, user, message.from_user.id == ADMIN_ID)
-        await message.answer(" ", reply_markup=main_keyboard(False, False))
+        await message.answer("\u200b", reply_markup=main_keyboard(False, False))
         return
     await message.answer(
         "Расскажи, что произошло в этот момент: 📝\n\n"
@@ -481,7 +487,7 @@ async def start_review(message: Message, state: FSMContext):
         return
     if message.from_user.id != ADMIN_ID and not has_active_subscription(user):
         await send_paywall(message, user, message.from_user.id == ADMIN_ID)
-        await message.answer(" ", reply_markup=main_keyboard(False, False))
+        await message.answer("\u200b", reply_markup=main_keyboard(False, False))
         return
 
     events = get_today_events(user[0])
@@ -604,35 +610,33 @@ async def reminder_loop(bot: Bot):
                 current_hour = user_local_time.hour
                 current_minute = user_local_time.minute
                 
-                # Уведомление об окончании подписки (10:00 утра)
-                if current_hour == 10 and current_minute == 0:
-                    user_row = get_user(tg_id)
-                    if user_row:
-                        sub_end = get_subscription_ends_at(user_row)
-                        if sub_end:
-                            try:
-                                end_date = date.fromisoformat(sub_end)
-                                # Если подписка заканчивается сегодня
-                                if end_date == date.today():
-                                    # Проверяем, что уведомление еще не было отправлено сегодня
-                                    last_notified = get_last_subscription_expiry_notified_date(user_id)
-                                    if last_notified != today_str:
-                                        name = get_display_name(user_row)
-                                        is_trial = get_trial_used(user_row)
-                                        trial_text = "пробный период" if is_trial else "подписка"
-                                        try:
-                                            await bot.send_message(
-                                                tg_id,
-                                                f"📢 {name}, сегодня заканчивается твой {trial_text}! 📅\n\n"
-                                                "Чтобы продолжить пользоваться ботом (записывать моменты, "
-                                                "вечерний разбор и напоминания), оформи подписку. 💙",
-                                                reply_markup=subscription_keyboard(user_row)
-                                            )
-                                            set_last_subscription_expiry_notified_date(user_id, today_str)
-                                        except Exception:
-                                            pass  # Skip if user blocked bot or other error
-                            except (ValueError, TypeError):
-                                pass
+                # Уведомление об окончании подписки (10:00 утра) — отключено в FREE_MODE, на будущее
+                # if current_hour == 10 and current_minute == 0:
+                #     user_row = get_user(tg_id)
+                #     if user_row:
+                #         sub_end = get_subscription_ends_at(user_row)
+                #         if sub_end:
+                #             try:
+                #                 end_date = date.fromisoformat(sub_end)
+                #                 if end_date == date.today():
+                #                     last_notified = get_last_subscription_expiry_notified_date(user_id)
+                #                     if last_notified != today_str:
+                #                         name = get_display_name(user_row)
+                #                         is_trial = get_trial_used(user_row)
+                #                         trial_text = "пробный период" if is_trial else "подписка"
+                #                         try:
+                #                             await bot.send_message(
+                #                                 tg_id,
+                #                                 f"📢 {name}, сегодня заканчивается твой {trial_text}! 📅\n\n"
+                #                                 "Чтобы продолжить пользоваться ботом (записывать моменты, "
+                #                                 "вечерний разбор и напоминания), оформи подписку. 💙",
+                #                                 reply_markup=subscription_keyboard(user_row)
+                #                             )
+                #                             set_last_subscription_expiry_notified_date(user_id, today_str)
+                #                         except Exception:
+                #                             pass
+                #             except (ValueError, TypeError):
+                #                 pass
                 
                 # 1:00 PM check-in notification (13:00-13:01)
                 # Проверяем диапазон, чтобы не пропустить уведомление
@@ -902,7 +906,7 @@ async def button_handler(callback: CallbackQuery, state: FSMContext):
     if callback.from_user.id != ADMIN_ID and not has_active_subscription(user):
         await callback.message.edit_reply_markup(None)
         await send_paywall(callback.message, user, False)
-        await callback.message.answer(" ", reply_markup=main_keyboard(False, False))
+        await callback.message.answer("\u200b", reply_markup=main_keyboard(False, False))
         await safe_callback_answer(callback)
         return
 
@@ -1015,7 +1019,7 @@ async def keyboard_handler(message: Message, state: FSMContext):
             return
         if message.from_user.id != ADMIN_ID and not has_active_subscription(user):
             await send_paywall(message, user, message.from_user.id == ADMIN_ID)
-            await message.answer(" ", reply_markup=main_keyboard(False, False))
+            await message.answer("\u200b", reply_markup=main_keyboard(False, False))
             return
         await pogryz_start(message, state)
     elif message.text == "💳 Подписка":
@@ -1037,12 +1041,12 @@ async def keyboard_handler(message: Message, state: FSMContext):
             )
         else:
             await send_paywall(message, user, message.from_user.id == ADMIN_ID)
-            await message.answer(" ", reply_markup=main_keyboard(message.from_user.id == ADMIN_ID, False))
+            await message.answer("\u200b", reply_markup=main_keyboard(message.from_user.id == ADMIN_ID, False))
     elif message.text == "⚙️ Настройки":
         user = get_user(message.from_user.id)
         if user and message.from_user.id != ADMIN_ID and not has_active_subscription(user):
             await send_paywall(message, user, False)
-            await message.answer(" ", reply_markup=main_keyboard(False, False))
+            await message.answer("\u200b", reply_markup=main_keyboard(False, False))
             return
         await message.answer(
             "⚙️ Настройки\n\nВыберите, что хотите настроить:",
